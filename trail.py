@@ -11,8 +11,9 @@ import pandas as pd
 # 2. DONE - Modify the stop loss to use a % rather than a static amount. E.g., 5% stop loss.
 # 3. DONE? - Modify the logging output to specify how much is currently in the hopper (e.g., ETH to trade: 0.5, 0.75, etc.)
 # 4. Adjust script so it only initializes the stop loss once a threshold is first hit
-# 4. Set up actual logging output to a logfile.
-# 5. Prepare to dockerize the script
+# 5. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged separately for tracking purposes.
+# 6. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
+# 7. Prepare to dockerize the script
 
 class StopTrail():
 
