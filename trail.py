@@ -17,7 +17,8 @@ import pandas as pd
 
 class StopTrail():
 
-	stoploss_initialized = False # can't get this variable to update from functions below. Why?
+	print('starting StopTrail')
+	stoploss_initialized = False # can't get this variable to update from functions below. Why? I know it's not looping back up here.. it's just not updating below.
 
 	def __init__(self, market, type, stopsize, interval):
 		self.coinbasepro = CoinbasePro(
