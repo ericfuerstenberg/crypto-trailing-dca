@@ -17,6 +17,8 @@ import pandas as pd
 
 class StopTrail():
 
+	stoploss_initialized = False
+
 	def __init__(self, market, type, stopsize, interval):
 		self.coinbasepro = CoinbasePro(
 			api_key=config.API_DETAILS['API_KEY'],
@@ -28,44 +30,49 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-		self.stoploss = self.initialize_stop() # only initialize the stop loss once one of our exit strategy thresholds is hit
+		self.stoploss = StopTrail.stoploss_initialized
 		self.df, self.hopper = self.initialize_hopper()
-		self.amount = self.coinbasepro.get_balance(self.market.split("/")[0]) # set up tracking for current amount in hopper or to be sold
-		#self.price = self.coinbasepro.get_price(self.market)
 
 	def initialize_stop(self):
+		global stoploss_initialized
 		price = self.coinbasepro.get_price(self.market)
 		if self.type == "buy":
-			return (price + (price * self.stopsize))
+			self.stoploss = (price + (price * self.stopsize))
+			return self.stoploss
 		else:
-			return (price - (price * self.stopsize))
+			self.stoploss = (price - (price * self.stopsize))
+			return self.stoploss
+		print('Stop loss initialized at: ' + str(self.stoploss))
+		stoploss_initialized = True
 
 	def update_stop(self):
-		price = self.coinbasepro.get_price(self.market)
-		if self.type == "sell":
-			if (price - (price * self.stopsize)) > self.stoploss:
-				self.stoploss = (price - (price * self.stopsize))
-				print("New high observed: Updating stop loss to %.8f" % self.stoploss)
-			elif price <= self.stoploss:
-				self.running = False
-				#amount = self.coinbasepro.get_balance(self.market.split("/")[0]) # would need to update this to read amount from the 'holding pen/hopper' 
-				amount = self.hopper
-				price = self.coinbasepro.get_price(self.market)
-				self.coinbasepro.sell(self.market, amount, price)
-				print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
-				print("Sold %.8f %s for %.8f %s" % (amount, self.market.split("/")[0], (price*amount), self.market.split("/")[1]))
-		elif self.type == "buy":
-			if (price + self.stopsize) < self.stoploss:
-				self.stoploss = price + self.stopsize
-				print("New low observed: Updating stop loss to %.8f" % self.stoploss)
-			elif price >= self.stoploss:
-				self.running = False
-				balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-				price = self.coinbasepro.get_price(self.market)
-				amount = (balance / price) * 0.999 # 0.10% maker/taker fee without BNB
-				self.coinbasepro.buy(self.market, amount, price)
-				print("Buy triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
-
+		if StopTrail.stoploss_initialized:
+			price = self.coinbasepro.get_price(self.market)
+			if self.type == "sell":
+				if (price - (price * self.stopsize)) > self.stoploss:
+					self.stoploss = (price - (price * self.stopsize))
+					print("New high observed: Updating stop loss to %.8f" % self.stoploss)
+				elif price <= self.stoploss:
+					self.running = False
+					#amount = self.coinbasepro.get_balance(self.market.split("/")[0]) # would need to update this to read amount from the 'holding pen/hopper' 
+					amount = self.hopper
+					price = self.coinbasepro.get_price(self.market)
+					self.coinbasepro.sell(self.market, amount, price)
+					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
+					print("Sold %.8f %s for %.8f %s" % (amount, self.market.split("/")[0], (price*amount), self.market.split("/")[1]))
+			elif self.type == "buy":
+				if (price + self.stopsize) < self.stoploss:
+					self.stoploss = price + self.stopsize
+					print("New low observed: Updating stop loss to %.8f" % self.stoploss)
+				elif price >= self.stoploss:
+					self.running = False
+					balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+					price = self.coinbasepro.get_price(self.market)
+					amount = (balance / price) * 0.999 # 0.10% maker/taker fee without BNB
+					self.coinbasepro.buy(self.market, amount, price)
+					print("Buy triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
+		else:
+			print('No stoploss yet initialized. Waiting.')
 
 	def initialize_hopper(self):
 		# set the base dataframe here and initialize the empty hopper
@@ -92,6 +99,8 @@ class StopTrail():
 				amount = first_row.iloc[0]['amount']
 				threshold = first_row.iloc[0]['price']
 				print('Hit our threshold at ' + str(threshold) + '. Adding ' + str(amount) + ' to hopper.')
+				if not StopTrail.stoploss_initialized:
+					 self.initialize_stop()
 				self.hopper += amount
 				print('Hopper: ' + str(self.hopper))
 			else:
@@ -110,9 +119,13 @@ class StopTrail():
 		print("Market: %s" % self.market)
 		print("Available to sell: %s" % self.hopper)
 		print("Last price: %.8f" % price)
-		print("Stop loss: %.8f" % self.stoploss)
+		if StopTrail.stoploss_initialized:
+			print("Stop loss: %s" % self.stoploss)
+		else:
+			print('Stop loss: N/A')
 		print("Trailing stop: %s percent" % (self.stopsize*100))
 		print("---------------------")
+
 
 	def run(self):
 		self.running = True
@@ -121,3 +134,11 @@ class StopTrail():
 			self.update_hopper()
 			self.update_stop()
 			time.sleep(self.interval)
+
+	# def run_once(f):
+	# 	def wrapper(*args, **kwargs):
+	# 		if not wrapper.has_run:
+	# 			wrapper.has_run = True
+	# 			return f(*args, **kwargs)
+	# 	wrapper.has_run = False
+	# 	return wrapper
