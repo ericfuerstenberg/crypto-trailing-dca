@@ -17,7 +17,7 @@ import pandas as pd
 
 class StopTrail():
 
-	stoploss_initialized = False
+	stoploss_initialized = False # can't get this variable to update from functions below. Why?
 
 	def __init__(self, market, type, stopsize, interval):
 		self.coinbasepro = CoinbasePro(
@@ -30,23 +30,33 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-		self.stoploss = StopTrail.stoploss_initialized
+		#self.stopinit = StopTrail.stoploss_initialized
+		print('Init: ' + str(StopTrail.stoploss_initialized))
 		self.df, self.hopper = self.initialize_hopper()
 
 	def initialize_stop(self):
 		global stoploss_initialized
+		#global self.stopinit
 		price = self.coinbasepro.get_price(self.market)
+		stoploss_initialized = True
+		print('initialize stop status: ' + str(StopTrail.stoploss_initialized))
 		if self.type == "buy":
 			self.stoploss = (price + (price * self.stopsize))
-			return self.stoploss
+			print('Stop loss initialized at: ' + str(self.stoploss))
+			return self.stoploss, stoploss_initialized
 		else:
 			self.stoploss = (price - (price * self.stopsize))
-			return self.stoploss
-		print('Stop loss initialized at: ' + str(self.stoploss))
-		stoploss_initialized = True
+			print('Stop loss initialized at: ' + str(self.stoploss))
+			return self.stoploss, stoploss_initialized
+		# print('Stop loss initialized at: ' + str(self.stoploss))
+		# stoploss_initialized = True
+		# print('initialize stop status 2: ' + str(stoploss_initialized))
+		# return stoploss_initialized
+		# self.stopinit = True
+		# return self.stopinit
 
 	def update_stop(self):
-		if StopTrail.stoploss_initialized:
+		if StopTrail.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
 			if self.type == "sell":
 				if (price - (price * self.stopsize)) > self.stoploss:
@@ -99,7 +109,8 @@ class StopTrail():
 				amount = first_row.iloc[0]['amount']
 				threshold = first_row.iloc[0]['price']
 				print('Hit our threshold at ' + str(threshold) + '. Adding ' + str(amount) + ' to hopper.')
-				if not StopTrail.stoploss_initialized:
+				print('Update Hopper stoploss status: ' + str(StopTrail.stoploss_initialized) )
+				if StopTrail.stoploss_initialized == False:
 					 self.initialize_stop()
 				self.hopper += amount
 				print('Hopper: ' + str(self.hopper))
@@ -119,7 +130,7 @@ class StopTrail():
 		print("Market: %s" % self.market)
 		print("Available to sell: %s" % self.hopper)
 		print("Last price: %.8f" % price)
-		if StopTrail.stoploss_initialized:
+		if StopTrail.stoploss_initialized is True:
 			print("Stop loss: %s" % self.stoploss)
 		else:
 			print('Stop loss: N/A')
