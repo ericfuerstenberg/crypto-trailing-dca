@@ -1,9 +1,9 @@
 # Obtain API key at https://www.binance.com/userCenter/createApi.html
 
 API_DETAILS = {
-    'API_KEY': '***REMOVED***',
-    'API_SECRET': '***REMOVED***',
-    'PASSWORD': '***REMOVED***'
+    'API_KEY': <API_KEY>,
+    'API_SECRET': <API_SECRET>,
+    'PASSWORD': <PASSPHRASE>
 }
 
 EXIT_STRATEGY = {
