@@ -4,6 +4,7 @@ import config
 import time
 import datetime
 import pandas as pd
+import sqlite3 as sl
 
 # PLEASE CONFIGURE API DETAILS IN config.py
 
@@ -22,6 +23,7 @@ import pandas as pd
 
 # Other Notes:
 # 1. The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
+# 2. It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
 
 class StopTrail():
 
@@ -68,7 +70,8 @@ class StopTrail():
 					#amount = self.coinbasepro.get_balance(self.market.split("/")[0]) # would need to update this to read amount from the 'holding pen/hopper' 
 					amount = self.hopper
 					price = self.coinbasepro.get_price(self.market)
-					self.coinbasepro.sell(self.market, amount, price)
+					#self.coinbasepro.sell(self.market, amount, price)
+					self.coinbasepro.sell(self.market, amount)
 					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
 					print("Sold %.8f %s for %.8f %s" % (amount, self.market.split("/")[0], (price*amount), self.market.split("/")[1]))
 			elif self.type == "buy":
@@ -102,6 +105,34 @@ class StopTrail():
 		price = self.coinbasepro.get_price(self.market)
 		total_rows = len(self.df.index)
 
+		# con = sl.connect("exit_strategy.db")
+		# crsr = con.cursor()
+		# crsr.execute("SELECT * FROM PRICES;")
+		# # crsr2 = con.cursor()
+		# # crsr2.execute("SELECT Count(*) from PRICES;")
+
+		# #total_rows = crsr2.fetchall()
+		# first_row = crsr.fetchone()
+		# exit_price = first_row[1]
+		# exit_amount = first_row[2]
+
+		# if total_rows > 0:
+		# 	if price >= exit_price:
+		# 		#need line here to modify the database. Delete the row that we are using now.
+		# 		crsr.execute("DELETE FROM PRICES ORDER BY ID LIMIT 1;")
+		# 		print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
+		# 		#print('Update Hopper stoploss status: ' + str(self.stoploss_initialized) )
+		# 		if self.stoploss_initialized == False:
+		# 			 self.initialize_stop()
+		# 		self.hopper += exit_amount
+		# 		print('Hopper: ' + str(self.hopper))
+		# 	else:
+		# 		threshold = self.df.iloc[0]['price']
+		# 		print('Price has not yet met the next threshold of ' + str(threshold))
+
+		# else:
+		# 	print('No more values to add to hopper.')
+
 		if total_rows > 0:
 			if price >= self.df.iloc[0]['price']:
 				self.df,first_row = self.df.drop(self.df.head(1).index),self.df.head(1)
@@ -119,7 +150,7 @@ class StopTrail():
 
 		else:
 			print('No more values to add to hopper.')
-			
+
 		return self.hopper
 
 	def print_status(self):

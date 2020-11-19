@@ -24,13 +24,12 @@ class CoinbasePro(): # CoinbasePro
             price=price,
         ))
 
-    def sell(self, market, amount, price):
+    def sell(self, market, amount):
         return (self.ccxtClient.create_order(
             symbol=market,
-            type="limit",
+            type="market",
             side="sell",
-            amount=amount,
-            price=price,
+            amount=amount
         ))
 
     def get_price(self, market):
