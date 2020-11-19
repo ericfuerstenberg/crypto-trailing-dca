@@ -20,11 +20,18 @@ with con:
         );
     """)
 
-prices = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
+    con.execute("""
+        CREATE TABLE stoploss (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            stop_value INTEGER
+        );
+    """)
+
+thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
 data1 = [
-    (1, 17949, 0.05, 'N'),
-    (2, 17990, 0.09, 'N'),
-    (3, 18079, 0.1, 'N')
+    (1, 17880, 0.05, 'N'),
+    (2, 17910, 0.09, 'N'),
+    (3, 17979, 0.1, 'N')
 ]
 
 hopper = 'INSERT INTO hopper (id, amount) values (?, ?)'
@@ -32,6 +39,12 @@ data2 = [
     (1, 0)
 ]
 
+stoploss = 'INSERT INTO stoploss (id, stop_value) values (?, ?)'
+data3 = [
+    (1, 0)
+]
+
 with con:
-    con.executemany(prices, data1) 
+    con.executemany(thresholds, data1) 
     con.executemany(hopper, data2)
+    con.executemany(stoploss, data3)
