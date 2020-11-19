@@ -21,6 +21,7 @@ import sqlite3 as sl
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
 # 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
 # 9. Prepare to dockerize the script
+# 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 
 
 # Other Notes:
@@ -63,12 +64,18 @@ class StopTrail():
 					self.stoploss = (price - (price * self.stopsize))
 					print("New high observed: Updating stop loss to %.8f" % self.stoploss)
 				elif price <= self.stoploss:
-					self.running = False
-					amount = self.hopper
-					#price = self.coinbasepro.get_price(self.market) # unecessary? We define price just above this elif block. Also, the market sell doesn't need a price. 
+					self.running = False #this is the line that "breaks" the script and stops everything, just remove this to keep it running after a sell?
+					amount = self.hopper 
+					# when we sell here we need to reset the hopper value in the hopper table, else when the script restarts it will keep the old hopper value
 					self.coinbasepro.sell(self.market, amount)
+					con = sl.connect("exit_strategy.db")
+					c = con.cursor()
+					c.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
+					self.hopper = 0
+					con.commit()
 					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
 					print("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
+					print("Reset Hopper: " + str(self.hopper))
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
@@ -125,12 +132,8 @@ class StopTrail():
 			exit_amount = first_row[2]
 			
 			if price >= exit_price:
-				# modify the thresholds table to remove the first row (so that we don't reference an old threshold)
-				# INSTEAD, we should update the row to change 'threshold_hit' to 'Y'
-				row_id = int(first_row[0])
-				print(row_id)
+				row_id = str(first_row[0])
 				c3 = con.cursor()
-				#c3.execute("DELETE FROM thresholds WHERE ID in (SELECT ID FROM thresholds LIMIT 1);")
 				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
 				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
 				if self.stoploss_initialized == False:
@@ -138,8 +141,7 @@ class StopTrail():
 				# write the new hopper value to the hopper table
 				self.hopper += exit_amount
 				c4 = con.cursor()
-				index = 1
-				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (index, self.hopper)) # this should prob be UPDATE
+				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper)) # this should prob be UPDATE
 				print('Hopper: ' + str(self.hopper))
 				con.commit()
 			else:
