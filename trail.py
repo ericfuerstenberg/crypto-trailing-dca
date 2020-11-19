@@ -40,7 +40,6 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-		#self.df, self.hopper = self.initialize_hopper() #hold over from dataframe strategy
 		self.hopper = self.initialize_hopper()
 		self.stoploss_initialized = False
 
@@ -66,10 +65,10 @@ class StopTrail():
 				elif price <= self.stoploss:
 					self.running = False
 					amount = self.hopper
-					price = self.coinbasepro.get_price(self.market)
+					#price = self.coinbasepro.get_price(self.market) # unecessary? We define price just above this elif block. Also, the market sell doesn't need a price. 
 					self.coinbasepro.sell(self.market, amount)
 					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
-					print("Sold %.8f %s for %.8f %s" % (amount, self.market.split("/")[0], (price*amount), self.market.split("/")[1]))
+					print("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
@@ -132,7 +131,7 @@ class StopTrail():
 				print(row_id)
 				c3 = con.cursor()
 				#c3.execute("DELETE FROM thresholds WHERE ID in (SELECT ID FROM thresholds LIMIT 1);")
-				c3.execute("UPDATE thresholds SET threshold_hit='Y' WHERE id=?", (row_id))
+				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
 				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
 				if self.stoploss_initialized == False:
 					 self.initialize_stop()
