@@ -14,11 +14,14 @@ import sqlite3 as sl
 # 3. DONE? - Modify the logging output to specify how much is currently in the hopper (e.g., ETH to trade: 0.5, 0.75, etc.)
 # 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
 # 5. Need to allow script to continue running after a sell, right now it simply exits
-# 6. Figure out how to persist the exit strategy table and make adjustments based on what thresholsd have been hit.
-# 6a. 	Right now every time the script runs it resets the thresholds. Instead, it should update the threshold information to remove cases that have been added to the hopper and/or sold.
+# 6. Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
+# 6b. 	Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
+# 7. Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
+# 7a. 	When hopper changes, insert the new value into the database.
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
 # 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
 # 9. Prepare to dockerize the script
+# 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 
 
 # Other Notes:
@@ -38,16 +41,12 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-		#self.stopinit = StopTrail.stoploss_initialized
-		#print('Init: ' + str(self.stoploss_initialized))
-		self.df, self.hopper = self.initialize_hopper()
+		self.hopper = self.initialize_hopper()
 		self.stoploss_initialized = False
-		#print('Init: ' + str(self.stoploss_initialized))
 
 	def initialize_stop(self):
 		self.stoploss_initialized = True
 		price = self.coinbasepro.get_price(self.market)
-		#print('initialize stop status: ' + str(self.stoploss_initialized))
 		if self.type == "buy":
 			self.stoploss = (price + (price * self.stopsize))
 			print('Stop loss initialized at: ' + str(self.stoploss))
@@ -58,7 +57,6 @@ class StopTrail():
 			return self.stoploss, self.stoploss_initialized
 
 	def update_stop(self):
-		#print('update_stop() :' + str(self.stoploss_initialized))
 		if self.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
 			if self.type == "sell":
@@ -66,14 +64,18 @@ class StopTrail():
 					self.stoploss = (price - (price * self.stopsize))
 					print("New high observed: Updating stop loss to %.8f" % self.stoploss)
 				elif price <= self.stoploss:
-					self.running = False
-					#amount = self.coinbasepro.get_balance(self.market.split("/")[0]) # would need to update this to read amount from the 'holding pen/hopper' 
-					amount = self.hopper
-					price = self.coinbasepro.get_price(self.market)
-					#self.coinbasepro.sell(self.market, amount, price)
+					self.running = False #this is the line that "breaks" the script and stops everything, just remove this to keep it running after a sell?
+					amount = self.hopper 
+					# when we sell here we need to reset the hopper value in the hopper table, else when the script restarts it will keep the old hopper value
 					self.coinbasepro.sell(self.market, amount)
+					con = sl.connect("exit_strategy.db")
+					c = con.cursor()
+					c.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
+					self.hopper = 0
+					con.commit()
 					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
-					print("Sold %.8f %s for %.8f %s" % (amount, self.market.split("/")[0], (price*amount), self.market.split("/")[1]))
+					print("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
+					print("Reset Hopper: " + str(self.hopper))
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
@@ -88,43 +90,80 @@ class StopTrail():
 		else:
 			print('No stoploss yet initialized. Waiting.')
 
+
 	def initialize_hopper(self):
 		# set the base dataframe here and initialize the empty hopper
-		df = pd.DataFrame(data=config.EXIT_STRATEGY['DATA'])
-		self.hopper = 0
-		return df, self.hopper
+		#df = pd.DataFrame(data=config.EXIT_STRATEGY['DATA'])
+		#self.hopper = 0
+		#return df, self.hopper
+
+		# DATABASE REFACTOR: read hopper value from the HOPPER table of the db
+		con = sl.connect("exit_strategy.db")
+		c = con.cursor()
+		c.execute("SELECT * FROM HOPPER;")
+		first_row = c.fetchone()
+		con.close()
+
+		hopper_amount = first_row[1]
+		print('hopper: ' + str(hopper_amount))
+		self.hopper = hopper_amount
+		return self.hopper
+
 
 	def update_hopper(self):
-		# create a function that watches the current price and if it meets the threshold set in the dataframe, move the specified amount of ETH from the dataframe to the hopper
-		# hopper should contain a running tally of the "released" ETH that can be used during the next trade 
-		#    price  amount
-		# 0  18190    0.05
-		# 1  18200    0.09
-		# 2  18202    0.10
 
 		price = self.coinbasepro.get_price(self.market)
-		total_rows = len(self.df.index)
+		#total_rows = len(self.df.index)
 
-		# con = sl.connect("exit_strategy.db")
-		# crsr = con.cursor()
-		# crsr.execute("SELECT * FROM PRICES;")
-		# # crsr2 = con.cursor()
-		# # crsr2.execute("SELECT Count(*) from PRICES;")
+		# DATABASE REFACTOR
+		con = sl.connect("exit_strategy.db")
+		c = con.cursor()
+		c.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+		result = c.fetchone()
+		remaining_rows = result[0]
+		print('remaining rows: ' + str(remaining_rows))
 
-		# #total_rows = crsr2.fetchall()
-		# first_row = crsr.fetchone()
-		# exit_price = first_row[1]
-		# exit_amount = first_row[2]
+		if remaining_rows > 0: # figure out how to get a count of all rows in the db		
+			c2 = con.cursor()
+			c2.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
+			
+			first_row = c2.fetchone()
+			exit_price = first_row[1]
+			exit_amount = first_row[2]
+			
+			if price >= exit_price:
+				row_id = str(first_row[0])
+				c3 = con.cursor()
+				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
+				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
+        if self.stoploss_initialized == False:
+					 self.initialize_stop()
+				# write the new hopper value to the hopper table
+				self.hopper += exit_amount
+				c4 = con.cursor()
+				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper)) # this should prob be UPDATE
+				print('Hopper: ' + str(self.hopper))
+				con.commit()
+			else:
+				threshold = exit_price
+				print('Price has not yet met the next threshold of ' + str(threshold))
+				con.commit()
 
+		else:
+			print('No more values to add to hopper.')
+			con.commit()
+
+		# OLD STRATEGY, DATAFRAME
 		# if total_rows > 0:
-		# 	if price >= exit_price:
-		# 		#need line here to modify the database. Delete the row that we are using now.
-		# 		crsr.execute("DELETE FROM PRICES ORDER BY ID LIMIT 1;")
-		# 		print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
+		# 	if price >= self.df.iloc[0]['price']:
+		# 		self.df,first_row = self.df.drop(self.df.head(1).index),self.df.head(1)
+		# 		amount = first_row.iloc[0]['amount']
+		# 		threshold = first_row.iloc[0]['price']
+		# 		print('Hit our threshold at ' + str(threshold) + '. Adding ' + str(amount) + ' to hopper.')
 		# 		#print('Update Hopper stoploss status: ' + str(self.stoploss_initialized) )
 		# 		if self.stoploss_initialized == False:
 		# 			 self.initialize_stop()
-		# 		self.hopper += exit_amount
+		# 		self.hopper += amount
 		# 		print('Hopper: ' + str(self.hopper))
 		# 	else:
 		# 		threshold = self.df.iloc[0]['price']
@@ -132,24 +171,6 @@ class StopTrail():
 
 		# else:
 		# 	print('No more values to add to hopper.')
-
-		if total_rows > 0:
-			if price >= self.df.iloc[0]['price']:
-				self.df,first_row = self.df.drop(self.df.head(1).index),self.df.head(1)
-				amount = first_row.iloc[0]['amount']
-				threshold = first_row.iloc[0]['price']
-				print('Hit our threshold at ' + str(threshold) + '. Adding ' + str(amount) + ' to hopper.')
-				#print('Update Hopper stoploss status: ' + str(self.stoploss_initialized) )
-				if self.stoploss_initialized == False:
-					 self.initialize_stop()
-				self.hopper += amount
-				print('Hopper: ' + str(self.hopper))
-			else:
-				threshold = self.df.iloc[0]['price']
-				print('Price has not yet met the next threshold of ' + str(threshold))
-
-		else:
-			print('No more values to add to hopper.')
 
 		return self.hopper
 

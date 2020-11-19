@@ -1,14 +1,11 @@
 import ccxt
 
-# To Do:
-# 1. Modify to use ccxt to connect to CoinbasePro (https://github.com/ccxt/ccxt/blob/master/python/ccxt/coinbasepro.py)
-
-class CoinbasePro(): # CoinbasePro
+class CoinbasePro():
 
     def __init__(self, api_key, api_secret, password):
-        self.ccxtClient = ccxt.coinbasepro({ # ccxt.coinbasepro()
+        self.ccxtClient = ccxt.coinbasepro({
             'apiKey': api_key,
-            'secret': api_secret, # verify that you only need these two credentials - maybe need password too?
+            'secret': api_secret,
             'password': password
         })
 
