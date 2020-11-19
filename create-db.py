@@ -8,7 +8,8 @@ with con:
         CREATE TABLE thresholds (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             price INTEGER,
-            amount INTEGER
+            amount INTEGER,
+            threshold_hit STRING
         );
     """)
 
@@ -19,11 +20,11 @@ with con:
         );
     """)
 
-prices = 'INSERT INTO thresholds (id, price, amount) values(?, ?, ?)'
+prices = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
 data1 = [
-    (1, 17949, 0.05),
-    (2, 17990, 0.09),
-    (3, 18079, 0.1)
+    (1, 17949, 0.05, 'N'),
+    (2, 17990, 0.09, 'N'),
+    (3, 18079, 0.1, 'N')
 ]
 
 hopper = 'INSERT INTO hopper (id, amount) values (?, ?)'

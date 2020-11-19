@@ -15,7 +15,7 @@ import sqlite3 as sl
 # 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
 # 5. Need to allow script to continue running after a sell, right now it simply exits
 # 6. Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
-# 6a. 	Right now every time the script runs it resets the thresholds. Instead, it should update the threshold information to remove cases that have been added to the hopper and/or sold.
+# 6b. 	Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
 # 7. Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	When hopper changes, insert the new value into the database.
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
@@ -112,14 +112,14 @@ class StopTrail():
 		# DATABASE REFACTOR
 		con = sl.connect("exit_strategy.db")
 		c = con.cursor()
-		c.execute("SELECT Count(*) from thresholds;")
+		c.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
 		result = c.fetchone()
-		total_rows = result[0]
-		print('total rows: ' + str(total_rows))
+		remaining_rows = result[0]
+		print('remaining rows: ' + str(remaining_rows))
 
-		if total_rows > 0: # figure out how to get a count of all rows in the db		
+		if remaining_rows > 0: # figure out how to get a count of all rows in the db		
 			c2 = con.cursor()
-			c2.execute("SELECT * FROM thresholds;")
+			c2.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
 			
 			first_row = c2.fetchone()
 			exit_price = first_row[1]
@@ -127,8 +127,12 @@ class StopTrail():
 			
 			if price >= exit_price:
 				# modify the thresholds table to remove the first row (so that we don't reference an old threshold)
+				# INSTEAD, we should update the row to change 'threshold_hit' to 'Y'
+				row_id = int(first_row[0])
+				print(row_id)
 				c3 = con.cursor()
-				c3.execute("DELETE FROM thresholds WHERE ID in (SELECT ID FROM thresholds LIMIT 1);")
+				#c3.execute("DELETE FROM thresholds WHERE ID in (SELECT ID FROM thresholds LIMIT 1);")
+				c3.execute("UPDATE thresholds SET threshold_hit='Y' WHERE id=?", (row_id))
 				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
 				if self.stoploss_initialized == False:
 					 self.initialize_stop()
@@ -136,7 +140,7 @@ class StopTrail():
 				self.hopper += exit_amount
 				c4 = con.cursor()
 				index = 1
-				c4.execute("REPLACE INTO HOPPER (id, amount) VALUES (?, ?)", (index, self.hopper))
+				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (index, self.hopper)) # this should prob be UPDATE
 				print('Hopper: ' + str(self.hopper))
 				con.commit()
 			else:
