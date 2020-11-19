@@ -2,6 +2,7 @@ import ccxt
 from coinbasepro import CoinbasePro
 import config
 import time
+import datetime
 import pandas as pd
 
 # PLEASE CONFIGURE API DETAILS IN config.py
@@ -11,9 +12,16 @@ import pandas as pd
 # 2. DONE - Modify the stop loss to use a % rather than a static amount. E.g., 5% stop loss.
 # 3. DONE? - Modify the logging output to specify how much is currently in the hopper (e.g., ETH to trade: 0.5, 0.75, etc.)
 # 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
-# 5. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged separately for tracking purposes.
-# 6. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
-# 7. Prepare to dockerize the script
+# 5. Need to allow script to continue running after a sell, right now it simply exits
+# 6. Figure out how to persist the exit strategy table and make adjustments based on what thresholsd have been hit.
+# 6a. 	Right now every time the script runs it resets the thresholds. Instead, it should update the threshold information to remove cases that have been added to the hopper and/or sold.
+# 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
+# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
+# 9. Prepare to dockerize the script
+
+
+# Other Notes:
+# 1. The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
 
 class StopTrail():
 
@@ -32,7 +40,7 @@ class StopTrail():
 		#print('Init: ' + str(self.stoploss_initialized))
 		self.df, self.hopper = self.initialize_hopper()
 		self.stoploss_initialized = False
-		print('Init: ' + str(self.stoploss_initialized))
+		#print('Init: ' + str(self.stoploss_initialized))
 
 	def initialize_stop(self):
 		self.stoploss_initialized = True
@@ -85,7 +93,6 @@ class StopTrail():
 
 	def update_hopper(self):
 		# create a function that watches the current price and if it meets the threshold set in the dataframe, move the specified amount of ETH from the dataframe to the hopper
-		# self.update_hopper()
 		# hopper should contain a running tally of the "released" ETH that can be used during the next trade 
 		#    price  amount
 		# 0  18190    0.05
@@ -116,7 +123,10 @@ class StopTrail():
 
 	def print_status(self):
 		price = self.coinbasepro.get_price(self.market)
+		ts = time.time()
+		st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 		print("---------------------")
+		print(st)
 		print("Trail type: %s" % self.type)
 		print("Market: %s" % self.market)
 		print("Available to sell: %s" % self.hopper)
