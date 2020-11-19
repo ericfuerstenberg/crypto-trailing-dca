@@ -136,7 +136,7 @@ class StopTrail():
 				c3 = con.cursor()
 				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
 				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
-				if self.stoploss_initialized == False:
+        if self.stoploss_initialized == False:
 					 self.initialize_stop()
 				# write the new hopper value to the hopper table
 				self.hopper += exit_amount
