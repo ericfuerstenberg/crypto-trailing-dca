@@ -116,9 +116,10 @@ class StopTrail():
 			else:
 				threshold = self.df.iloc[0]['price']
 				print('Price has not yet met the next threshold of ' + str(threshold))
+
 		else:
 			print('No more values to add to hopper.')
-
+			
 		return self.hopper
 
 	def print_status(self):

@@ -1,4 +1,4 @@
-# Binance Trailing Stop-Loss
+# CoinbasePro Trailing Stop-Loss
 Provides a dynamic stop-loss that automatically adjusts as the price increases or decreases (depending on mode specified)
 
 
@@ -38,11 +38,11 @@ usage: main.py [-h] --symbol SYMBOL --size SIZE --type TYPE
 optional arguments:
   -h, --help           show this help message and exit
   --symbol SYMBOL      Market Symbol (Ex: NEO/BTC - NEO/USDT)
-  --size SIZE          How many satoshis (or USD) the stop loss should be
-                       placed above or below current price
+  --size SIZE          What percentage the stop loss should be
+                       placed above or below current price (e.g., 0.05 for 5%, 0.10 for 10%)
   --type TYPE          Specify whether the trailing stop loss should be in
                        buying or selling mode. (Ex: 'buy' or 'sell')
-  --interval INTERVAL  How often the bot should check for price changes
+  --interval INTERVAL  How often the bot should check for price changes (default 5 seconds)
 ```
 
 
