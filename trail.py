@@ -14,9 +14,9 @@ import sqlite3 as sl
 # 3. DONE? - Modify the logging output to specify how much is currently in the hopper (e.g., ETH to trade: 0.5, 0.75, etc.)
 # 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
 # 5. Need to allow script to continue running after a sell, right now it simply exits
-# 6. Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
+# 6. DONE - Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
 # 6b. 	Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
-# 7. Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
+# 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	When hopper changes, insert the new value into the database.
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
 # 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
@@ -51,7 +51,7 @@ class StopTrail():
 		c.close()
 		con.close()
 		stop_value = first_row[1]
-		print('stop already set at: ' + str(stop_value))
+		print('Stoploss already set at: ' + str(stop_value))
 		if stop_value != None:
 			self.stoploss = first_row[1]
 			self.stoploss_initialized = True
@@ -145,7 +145,7 @@ class StopTrail():
 		con.close()
 
 		hopper_amount = first_row[1]
-		print('hopper: ' + str(hopper_amount))
+		print('Hopper: ' + str(hopper_amount))
 		self.hopper = hopper_amount
 		return self.hopper
 
