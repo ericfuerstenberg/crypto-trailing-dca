@@ -36,24 +36,49 @@ class StopTrail():
 			api_secret=config.API_DETAILS['API_SECRET'],
 			password=config.API_DETAILS['PASSWORD']
 		)
+
 		self.market = market
 		self.type = type
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
 		self.hopper = self.initialize_hopper()
-		self.stoploss_initialized = False
+		#self.stoploss_initialized = False
+		con = sl.connect("exit_strategy.db")
+		c = con.cursor()
+		c.execute("SELECT * FROM stoploss;")
+		first_row = c.fetchone()
+		c.close()
+		con.close()
+		stop_value = first_row[1]
+		print('stop already set at: ' + str(stop_value))
+		if stop_value != None:
+			self.stoploss = first_row[1]
+			self.stoploss_initialized = True
+		else:
+			self.stoploss_initialized = False
 
 	def initialize_stop(self):
 		self.stoploss_initialized = True
 		price = self.coinbasepro.get_price(self.market)
+		con = sl.connect("exit_strategy.db")
+		c = con.cursor()
+		#if the stoploss is set in the table, grab that value, if not, set the stoploss from the market price
 		if self.type == "buy":
 			self.stoploss = (price + (price * self.stopsize))
+			c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			print('Stop loss initialized at: ' + str(self.stoploss))
+			c.close()
+			con.commit()
+			con.close()
 			return self.stoploss, self.stoploss_initialized
-		else:
+		else: 
 			self.stoploss = (price - (price * self.stopsize))
+			c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			print('Stop loss initialized at: ' + str(self.stoploss))
+			c.close()
+			con.commit()
+			con.close()
 			return self.stoploss, self.stoploss_initialized
 
 	def update_stop(self):
@@ -62,7 +87,13 @@ class StopTrail():
 			if self.type == "sell":
 				if (price - (price * self.stopsize)) > self.stoploss:
 					self.stoploss = (price - (price * self.stopsize))
-					print("New high observed: Updating stop loss to %.8f" % self.stoploss)
+					con = sl.connect("exit_strategy.db")
+					c = con.cursor()
+					c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+					c.close()
+					con.commit()
+					con.close()
+					print("New high observed: Updated stop loss to %.8f" % self.stoploss)
 				elif price <= self.stoploss:
 					self.running = False #this is the line that "breaks" the script and stops everything, just remove this to keep it running after a sell?
 					amount = self.hopper 
@@ -72,13 +103,21 @@ class StopTrail():
 					c = con.cursor()
 					c.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
 					self.hopper = 0
+					c.close()
 					con.commit()
+					con.close()
 					print("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
 					print("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
 					print("Reset Hopper: " + str(self.hopper))
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
+					con = sl.connect("exit_strategy.db")
+					c = con.cursor()
+					c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+					c.close()
+					con.commit()
+					con.close()
 					print("New low observed: Updating stop loss to %.8f" % self.stoploss)
 				elif price >= self.stoploss:
 					self.running = False
@@ -102,6 +141,7 @@ class StopTrail():
 		c = con.cursor()
 		c.execute("SELECT * FROM HOPPER;")
 		first_row = c.fetchone()
+		c.close()
 		con.close()
 
 		hopper_amount = first_row[1]
@@ -113,21 +153,21 @@ class StopTrail():
 	def update_hopper(self):
 
 		price = self.coinbasepro.get_price(self.market)
-		#total_rows = len(self.df.index)
 
-		# DATABASE REFACTOR
 		con = sl.connect("exit_strategy.db")
 		c = con.cursor()
 		c.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
 		result = c.fetchone()
+		c.close()
 		remaining_rows = result[0]
 		print('remaining rows: ' + str(remaining_rows))
 
-		if remaining_rows > 0: # figure out how to get a count of all rows in the db		
+		if remaining_rows > 0:
 			c2 = con.cursor()
 			c2.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
 			
 			first_row = c2.fetchone()
+			c2.close()
 			exit_price = first_row[1]
 			exit_amount = first_row[2]
 			
@@ -135,23 +175,29 @@ class StopTrail():
 				row_id = str(first_row[0])
 				c3 = con.cursor()
 				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
+				c3.close()
+				con.commit()
+				con.close()
 				print('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
-        if self.stoploss_initialized == False:
-					 self.initialize_stop()
+				if self.stoploss_initialized == False:
+					self.initialize_stop()
 				# write the new hopper value to the hopper table
+				con = sl.connect("exit_strategy.db")
 				self.hopper += exit_amount
 				c4 = con.cursor()
 				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper)) # this should prob be UPDATE
-				print('Hopper: ' + str(self.hopper))
+				c4.close()
 				con.commit()
+				print('Hopper: ' + str(self.hopper))
+				con.close()
 			else:
 				threshold = exit_price
 				print('Price has not yet met the next threshold of ' + str(threshold))
-				con.commit()
+				con.close()
 
 		else:
 			print('No more values to add to hopper.')
-			con.commit()
+			con.close()
 
 		# OLD STRATEGY, DATAFRAME
 		# if total_rows > 0:
