@@ -23,14 +23,14 @@ with con:
     con.execute("""
         CREATE TABLE stoploss (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            stop_value INTEGER
+            stop_value REAL
         );
     """)
 
 thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
 data1 = [
-    (1, 17880, 0.05, 'N'),
-    (2, 17910, 0.09, 'N'),
+    (1, 17790, 0.05, 'N'),
+    (2, 17810, 0.09, 'N'),
     (3, 17979, 0.1, 'N')
 ]
 
@@ -41,7 +41,7 @@ data2 = [
 
 stoploss = 'INSERT INTO stoploss (id, stop_value) values (?, ?)'
 data3 = [
-    (1, 0)
+    (1, None)
 ]
 
 with con:
