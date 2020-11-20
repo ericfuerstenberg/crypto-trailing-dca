@@ -19,9 +19,12 @@ import sqlite3 as sl
 # 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	When hopper changes, insert the new value into the database.
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
-# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds
+# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What id DB update fails and hopper doesn't reset?
 # 9. Prepare to dockerize the script
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
+# 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
+# 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
+#
 
 
 # Other Notes:
@@ -53,7 +56,7 @@ class StopTrail():
 		stop_value = first_row[1]
 		print('Stoploss already set at: ' + str(stop_value))
 		if stop_value != None:
-			self.stoploss = first_row[1]
+			self.stoploss = float(first_row[1])
 			self.stoploss_initialized = True
 		else:
 			self.stoploss_initialized = False
@@ -85,6 +88,8 @@ class StopTrail():
 		if self.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
 			if self.type == "sell":
+				print(price - (price * self.stopsize))
+				print(self.stoploss)
 				if (price - (price * self.stopsize)) > self.stoploss:
 					self.stoploss = (price - (price * self.stopsize))
 					con = sl.connect("exit_strategy.db")
