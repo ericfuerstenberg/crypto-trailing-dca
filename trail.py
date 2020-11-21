@@ -45,49 +45,74 @@ class StopTrail():
 			api_secret=config.API_DETAILS['API_SECRET'],
 			password=config.API_DETAILS['PASSWORD']
 		)
-
+		
 		self.market = market
 		self.type = type
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-		con = sl.connect("exit_strategy.db")
-		c = con.cursor()
-		c.execute("SELECT * FROM stoploss;")
-		first_row = c.fetchone()
-		c.close()
-		con.close()
+
+		#self.stoploss_initialized = False
+		
+		#Open db connection and check for a persisted stoploss value
+		self.con = sl.connect("exit_strategy.db")
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM stoploss;")
+		first_row = self.cursor.fetchone()
+		self.cursor.close()
+				
 		stop_value = first_row[1]
+
 		if stop_value != None:
 			logger.info(('Stoploss already set at: ' + str(stop_value)))
 			self.stoploss = float(first_row[1])
 			self.stoploss_initialized = True
 		else:
-			logger.info('No stoploss currently set')
+      logger.info('No stoploss currently set')
 			self.stoploss_initialized = False
 		self.hopper = self.initialize_hopper()
+			
+	def __del__(self):
+		print('\nInside __del__') 
+		print('Deconstructing StopTrail() safely')
+		self.close_db()
 
-
+	def __exit__(self, exc_type, exc_value, traceback): 
+		print('\nInside __exit__') 
+		print('\nExecution type:', exc_type) 
+		print('\nExecution value:', exc_value) 
+		print('\nTraceback:', traceback) 
+		self.close_db()
+		
+	def close_db(self):
+		if self.con:
+			 self.con.commit()
+			 self.con.close()
+			 print('Database closed')
+			
 	def initialize_stop(self):
 		self.stoploss_initialized = True
 		price = self.coinbasepro.get_price(self.market)
-		con = sl.connect("exit_strategy.db")
-		c = con.cursor()
+		
+		#if the stoploss is set in the table, grab that value, if not, set the stoploss from the market price
 		if self.type == "buy":
 			self.stoploss = (price + (price * self.stopsize))
-			c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			logger.info('Stop loss initialized at: ' + str(self.stoploss))
-			c.close()
-			con.commit()
-			con.close()
+			self.cursor.close()
+			self.con.commit()
+			
 			return self.stoploss, self.stoploss_initialized
-		else: 
+		
+    else: 
 			self.stoploss = (price - (price * self.stopsize))
-			c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			logger.info('Stop loss initialized at: ' + str(self.stoploss))
-			c.close()
-			con.commit()
-			con.close()
+			self.cursor.close()
+			self.con.commit()
+		
 			return self.stoploss, self.stoploss_initialized
 
 
@@ -99,38 +124,38 @@ class StopTrail():
 				# logger.info(self.stoploss)
 				if (price - (price * self.stopsize)) > self.stoploss:
 					self.stoploss = (price - (price * self.stopsize))
-					con = sl.connect("exit_strategy.db")
-					c = con.cursor()
-					c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
-					c.close()
-					con.commit()
-					con.close()
+					self.cursor = self.con.cursor()
+					self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+					self.cursor.close()
+					self.con.commit()
 					logger.info("New high observed: Updated stop loss to %.8f" % self.stoploss)
+
 				elif price <= self.stoploss:
 					self.running = False #this is the line that "breaks" the script and stops everything, just remove this to keep it running after a sell?
 					amount = self.hopper 
 					# when we sell here we need to reset the hopper value in the hopper table, else when the script restarts it will keep the old hopper value
 					self.coinbasepro.sell(self.market, amount)
-					con = sl.connect("exit_strategy.db")
-					c = con.cursor()
-					c.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
+				
+					self.cursor = self.con.cursor()
+					self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
 					self.hopper = 0
-					c.close()
-					con.commit()
-					con.close()
+					self.cursor.close()
+					self.con.commit()
+					
 					logger.info("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
 					logger.info("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
 					logger.info("Reset Hopper: " + str(self.hopper))
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
-					con = sl.connect("exit_strategy.db")
-					c = con.cursor()
-					c.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
-					c.close()
-					con.commit()
-					con.close()
+				
+					self.cursor = self.con.cursor()
+					self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+					self.cursor.close()
+					self.con.commit()
+				
 					logger.info("New low observed: Updating stop loss to %.8f" % self.stoploss)
+
 				elif price >= self.stoploss:
 					self.running = False
 					balance = self.coinbasepro.get_balance(self.market.split("/")[1])
@@ -143,12 +168,17 @@ class StopTrail():
 
 
 	def initialize_hopper(self):
-		con = sl.connect("exit_strategy.db")
-		c = con.cursor()
-		c.execute("SELECT * FROM HOPPER;")
-		first_row = c.fetchone()
-		c.close()
-		con.close()
+		# set the base dataframe here and initialize the empty hopper
+		#df = pd.DataFrame(data=config.EXIT_STRATEGY['DATA'])
+		#self.hopper = 0
+		#return df, self.hopper
+
+		# DATABASE REFACTOR: read hopper value from the HOPPER table of the db
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM HOPPER;")
+		first_row = self.cursor.fetchone()
+		self.cursor.close()
+
 		hopper_amount = first_row[1]
 		logger.info('Hopper: ' + str(hopper_amount))
 		self.hopper = hopper_amount
@@ -157,49 +187,46 @@ class StopTrail():
 
 	def update_hopper(self):
 		price = self.coinbasepro.get_price(self.market)
-		con = sl.connect("exit_strategy.db")
-		c = con.cursor()
-		c.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
-		result = c.fetchone()
-		c.close()
+
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+		result = self.cursor.fetchone()
+		self.cursor.close()
+
 		remaining_rows = result[0]
 		logger.info('Thresholds remaining: ' + str(remaining_rows))
 
 		if remaining_rows > 0:
-			c2 = con.cursor()
-			c2.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
-			first_row = c2.fetchone()
-			c2.close()
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
+			first_row = self.cursor.fetchone()
+			self.cursor.close()
 			exit_price = first_row[1]
 			exit_amount = first_row[2]
 			
 			if price >= exit_price:
 				row_id = str(first_row[0])
-				c3 = con.cursor()
-				c3.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
-				c3.close()
-				con.commit()
-				con.close()
+				self.cursor = self.con.cursor()
+				self.cursor.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
+				self.cursor.close()
+				self.con.commit()
 				logger.info('Hit our threshold at ' + str(exit_price) + '. Adding ' + str(exit_amount) + ' to hopper.')
 				if self.stoploss_initialized == False:
 					self.initialize_stop()
 				# write the new hopper value to the hopper table
-				con = sl.connect("exit_strategy.db")
 				self.hopper += exit_amount
-				c4 = con.cursor()
-				c4.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper)) # this should prob be UPDATE
-				c4.close()
-				con.commit()
+				self.cursor = self.con.cursor()
+				self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper)) # this should prob be UPDATE
+				self.cursor.close()
+				self.con.commit()
 				logger.info('Hopper: ' + str(self.hopper))
-				con.close()
+				
 			else:
 				threshold = exit_price
 				logger.info('Price has not yet met the next threshold of ' + str(threshold))
-				con.close()
 
 		else:
 			logger.info('No more values to add to hopper.')
-			con.close()
 
 		return self.hopper
 
