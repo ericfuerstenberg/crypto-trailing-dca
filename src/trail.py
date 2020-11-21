@@ -7,7 +7,7 @@ import pandas as pd
 import sqlite3 as sl
 import logging
 from crypto_bot_definitions import LOG_DIR
-from helper import get_logger
+from helper import get_logger, Config
 
 # PLEASE CONFIGURE API DETAILS IN config.py
 
@@ -18,12 +18,12 @@ from helper import get_logger
 # 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
 # 5. Need to allow script to continue running after a sell, right now it simply exits
 # 6. DONE - Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
-# 6b. 	Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
+# 6b. 	DONE Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
 # 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
-# 7a. 	When hopper changes, insert the new value into the database.
+# 7a. 	DONE When hopper changes, insert the new value into the database.
 # 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
 # 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What id DB update fails and hopper doesn't reset?
-# 9. Prepare to dockerize the script
+# 9. Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
 # 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
@@ -41,9 +41,12 @@ class StopTrail():
 		logger.info('Initializing bot...')
 
 		self.coinbasepro = CoinbasePro(
-			api_key=config.API_DETAILS['API_KEY'],
-			api_secret=config.API_DETAILS['API_SECRET'],
-			password=config.API_DETAILS['PASSWORD']
+			# api_key=Config.API_DETAILS['API_KEY'],
+			# api_secret=config.API_DETAILS['API_SECRET'],
+			# password=config.API_DETAILS['PASSWORD']
+			api_key=Config.get_value('api','api_key'),
+			api_secret=Config.get_value('api','api_secret'),
+			password=Config.get_value('api','password')
 		)
 		
 		self.market = market
@@ -66,7 +69,7 @@ class StopTrail():
 		else:
 			logger.info('No stoploss currently set')
 			self.stoploss_initialized = False
-			
+
 		self.hopper = self.initialize_hopper()
 			
 	def __del__(self):
@@ -116,6 +119,7 @@ class StopTrail():
 	def update_stop(self):
 		if self.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
+			
 			if self.type == "sell":
 				# logger.info(price - (price * self.stopsize))
 				# logger.info(self.stoploss)
@@ -132,25 +136,22 @@ class StopTrail():
 					amount = self.hopper 
 					# when we sell here we need to reset the hopper value in the hopper table, else when the script restarts it will keep the old hopper value
 					self.coinbasepro.sell(self.market, amount)
-				
 					self.cursor = self.con.cursor()
 					self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
 					self.hopper = 0
 					self.cursor.close()
 					self.con.commit()
-					
 					logger.info("Sell triggered | Price: %.8f | Stop loss: %.8f" % (price, self.stoploss))
 					logger.info("Sold %.8f %s at %.8f for %.8f %s" % (amount, self.market.split("/")[0], price, (price*amount), self.market.split("/")[1]))
 					logger.info("Reset Hopper: " + str(self.hopper))
+
 			elif self.type == "buy":
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
-				
 					self.cursor = self.con.cursor()
 					self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 					self.cursor.close()
 					self.con.commit()
-				
 					logger.info("New low observed: Updating stop loss to %.8f" % self.stoploss)
 
 				elif price >= self.stoploss:
