@@ -51,8 +51,6 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
-
-		#self.stoploss_initialized = False
 		
 		#Open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
@@ -60,16 +58,15 @@ class StopTrail():
 		self.cursor.execute("SELECT * FROM stoploss;")
 		first_row = self.cursor.fetchone()
 		self.cursor.close()
-				
 		stop_value = first_row[1]
-
 		if stop_value != None:
 			logger.info(('Stoploss already set at: ' + str(stop_value)))
 			self.stoploss = float(first_row[1])
 			self.stoploss_initialized = True
 		else:
-      logger.info('No stoploss currently set')
+			logger.info('No stoploss currently set')
 			self.stoploss_initialized = False
+			
 		self.hopper = self.initialize_hopper()
 			
 	def __del__(self):
@@ -105,7 +102,7 @@ class StopTrail():
 			
 			return self.stoploss, self.stoploss_initialized
 		
-    else: 
+		else: 
 			self.stoploss = (price - (price * self.stopsize))
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
@@ -178,7 +175,6 @@ class StopTrail():
 		self.cursor.execute("SELECT * FROM HOPPER;")
 		first_row = self.cursor.fetchone()
 		self.cursor.close()
-
 		hopper_amount = first_row[1]
 		logger.info('Hopper: ' + str(hopper_amount))
 		self.hopper = hopper_amount
@@ -187,12 +183,10 @@ class StopTrail():
 
 	def update_hopper(self):
 		price = self.coinbasepro.get_price(self.market)
-
 		self.cursor = self.con.cursor()
 		self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
 		result = self.cursor.fetchone()
 		self.cursor.close()
-
 		remaining_rows = result[0]
 		logger.info('Thresholds remaining: ' + str(remaining_rows))
 
