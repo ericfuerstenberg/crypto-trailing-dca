@@ -29,9 +29,9 @@ with con:
 
 thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
 data1 = [
-    (1, 17790, 0.05, 'N'),
-    (2, 17810, 0.09, 'N'),
-    (3, 17979, 0.1, 'N')
+    (1, 18420, 0.05, 'N'),
+    (2, 18590, 0.09, 'N'),
+    (3, 18700, 0.1, 'N')
 ]
 
 hopper = 'INSERT INTO hopper (id, amount) values (?, ?)'

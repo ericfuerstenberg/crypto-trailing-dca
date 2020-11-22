@@ -1,5 +1,11 @@
 # CoinbasePro Trailing Stop-Loss
-Provides a dynamic stop-loss that automatically adjusts as the price increases or decreases (depending on mode specified)
+Provides a dynamic stop-loss that automatically adjusts as the price increases or decreases (depending on mode specified).
+
+Allows user to create an exit strategy including:
+1. Exit price (e.g., $600)
+2. Amount of coins to release at exit price (e.g., 0.5 ETH)
+
+The bot will track the current price against the defined thresholds and release coins to be sold as thresholds are met. As new thresholds are hit, the bot will automatically increment a "hopper" to track the appropriate amount of coins to sell based on the defined exit strategy. When the market price drops below an established stop loss value, the bot will sell only the amount of coins that have been released into the hopper (i.e., those marked "available to sell"). 
 
 
 
@@ -7,7 +13,7 @@ Provides a dynamic stop-loss that automatically adjusts as the price increases o
 
 **Clone the repository**
 ```
-git clone https://github.com/sf04/Binance-Trailing-Stop-Loss
+git clone https://github.com/efuerstenberg/crypto-trailing-stoploss
 ```
 
 **Install required libraries**
@@ -20,9 +26,9 @@ pip install ccxt
 
 ## Configure API keys
 
-Obtain an API key [here](https://www.binance.com/userCenter/createApi.html)
+Obtain an API key from CoinbasePro
 
-Then modify `config.py` and insert your API key and secret
+Then modify `/conf/settings.ini` and insert your API key and secret
 
 
 
