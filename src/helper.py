@@ -15,7 +15,6 @@ def get_logger(file_name):
     """
     logging.config.fileConfig(__LOGGER_CONF_FILE, disable_existing_loggers=False)
     name = file_name.split("/")[-1].split(".")[0]
-    #print(name)
     logger = logging.getLogger(name)
     return logger
 
