@@ -27,13 +27,14 @@ from helper import get_logger, Config
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
 # 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
+# 13. Create a "price" table to track the highs. For each market price check, compare against the table of known prices. Update the table when a new high price is seen and then return this new high price to the logger output (New high price observed: PRICE).
+
+
 
 # Other Notes:
 # 1. The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
 # 2. It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
-
-# DONE
-### 3. Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
+#3. DONE - Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
 
 logger = get_logger(__file__)
 
@@ -96,6 +97,7 @@ class StopTrail():
 	def initialize_stop(self, threshold):
 		self.stoploss_initialized = True
 		price = self.coinbasepro.get_price(self.market)
+		self.tracked_price = price
 		
 		#if the stoploss is set in the table, grab that value, if not, set the stoploss from the market price
 		if self.type == "buy":
@@ -107,7 +109,7 @@ class StopTrail():
 			self.cursor.close()
 			self.con.commit()
 			
-			return self.stoploss, self.stoploss_initialized
+			return self.stoploss, self.stoploss_initialized, self.tracked_price
 		
 		else: 
 			#self.stoploss = (price - (price * self.stopsize))
@@ -118,12 +120,15 @@ class StopTrail():
 			self.cursor.close()
 			self.con.commit()
 		
-			return self.stoploss, self.stoploss_initialized
+			return self.stoploss, self.stoploss_initialized, self.tracked_price
 
 
 	def update_stop(self):
 		if self.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
+			if price > self.tracked_price:
+				logger.warn('New high observed: %.2f' % price)
+				self.tracked_price = price
 			
 			if self.type == "sell":
 				# logger.info(price - (price * self.stopsize))
@@ -281,7 +286,7 @@ class StopTrail():
 		else:
 			logger.info('Stop loss: N/A')
 		logger.info("Trailing stop: %s percent" % (self.stopsize*100))
-		logger.info("Last price: %.8f" % price)
+		logger.info("Last price: %.2f" % price)
 		logger.info("---------------------")
 
 	def run(self):
