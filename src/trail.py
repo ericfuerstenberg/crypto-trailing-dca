@@ -27,7 +27,7 @@ from helper import get_logger, Config
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
 # 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
-# 13. Create a "price" table to track the highs. For each market price check, compare against the table of known prices. Update the table when a new high price is seen and then return this new high price to the logger output (New high price observed: PRICE).
+# 13. DONE (did this in the script, no need for db table) - Create a "price" table to track the highs. For each market price check, compare against the table of known prices. Update the table when a new high price is seen and then return this new high price to the logger output (New high price observed: PRICE).
 
 
 
@@ -35,6 +35,7 @@ from helper import get_logger, Config
 # 1. The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
 # 2. It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
 #3. DONE - Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
+# 3a. Then also maybe we should update the stoploss to tbe the next threshold value if threshold is hit but we haven't moved up to the next stoploss value? Avoid situation where we increase hopper but our stoploss is still set at an earlier threshold value?
 
 logger = get_logger(__file__)
 
@@ -55,6 +56,7 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.running = False
+		self.tracked_price = self.coinbasepro.get_price(self.market)
 		
 		#Open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
@@ -64,7 +66,7 @@ class StopTrail():
 		self.cursor.close()
 		stop_value = first_row[1]
 		if stop_value != None:
-			logger.info(('Stoploss already set at: ' + str(stop_value)))
+			logger.warn('Stoploss already set at: %.4f' % stop_value)
 			self.stoploss = float(first_row[1])
 			self.stoploss_initialized = True
 		else:
@@ -94,15 +96,18 @@ class StopTrail():
 			 self.con.close()
 			 logger.info('Database closed')
 			
-	def initialize_stop(self, threshold):
+	#def initialize_stop(self, threshold):
+	def initialize_stop(self):
+		# TO DO: decide if you want to init the stoploss at your threshold or below your first threshold
+
 		self.stoploss_initialized = True
 		price = self.coinbasepro.get_price(self.market)
 		self.tracked_price = price
 		
 		#if the stoploss is set in the table, grab that value, if not, set the stoploss from the market price
 		if self.type == "buy":
-			#self.stoploss = (price + (price * self.stopsize))
-			self.stoploss = threshold 
+			self.stoploss = (price + (price * self.stopsize))
+			#self.stoploss = threshold 
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			logger.warn('Stop loss initialized at: ' + str(self.stoploss))
@@ -112,8 +117,8 @@ class StopTrail():
 			return self.stoploss, self.stoploss_initialized, self.tracked_price
 		
 		else: 
-			#self.stoploss = (price - (price * self.stopsize))
-			self.stoploss = threshold #set out first stoploss at our initial threshold, to ensure we don't sell below this value
+			self.stoploss = (price - (price * self.stopsize)) # this sets our first stoploss below our initial threshold value, will be less likely to get stopped out
+			#self.stoploss = threshold #set out first stoploss at our initial threshold, to ensure we don't sell below this value
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			logger.warn('Stop loss initialized at: ' + str(self.stoploss))
@@ -126,11 +131,11 @@ class StopTrail():
 	def update_stop(self):
 		if self.stoploss_initialized is True:
 			price = self.coinbasepro.get_price(self.market)
-			if price > self.tracked_price:
-				logger.warn('New high observed: %.2f' % price)
-				self.tracked_price = price
 			
 			if self.type == "sell":
+				if price > self.tracked_price:
+					logger.warn('New high observed: %.2f' % price)
+					self.tracked_price = price
 				# logger.info(price - (price * self.stopsize))
 				# logger.info(self.stoploss)
 				if (price - (price * self.stopsize)) > self.stoploss:
@@ -141,10 +146,21 @@ class StopTrail():
 					self.con.commit()
 					logger.warn("New high observed: %.2f | Updated stop loss to %.4f" % (price, self.stoploss))
 
+				# trying to add logic to update stoploss to the new threshold if it's hit before our stoploss gap is closed
+				# elif threshold > self.stoploss: 
+				# 	self.stoploss = (price - (price * self.stopsize))
+				# 	self.cursor = self.con.cursor()
+				# 	self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+				# 	self.cursor.close()
+				# 	self.con.commit()
+				# 	logger.warn("Hit our new threshold at %.2f | Updated stop loss to %.4f" % (threshold, self.stoploss))
+
 				elif price <= self.stoploss:
 					self.execute_sell()
 
 			elif self.type == "buy":
+				if price < self.tracked_price:
+					logger.warn('New low observed: %.2f' % price)
 				if (price + self.stopsize) < self.stoploss:
 					self.stoploss = price + self.stopsize
 					self.cursor = self.con.cursor()
@@ -211,7 +227,7 @@ class StopTrail():
 		self.cursor.close()
 		hopper_amount = first_row[1]
 		if hopper_amount > 0:
-			logger.info('Hopper already set at: ' + str(hopper_amount))
+			logger.warn('Hopper already set at: %.4f' % hopper_amount)
 		else:
 			logger.info('No hopper previously set. Starting at 0.')
 		self.hopper = hopper_amount
@@ -249,7 +265,8 @@ class StopTrail():
 				try:	
 					# initialize a stoploss, if one is not already initialized
 					if self.stoploss_initialized == False:
-						self.initialize_stop(threshold)
+						#self.initialize_stop(threshold)
+						self.initialize_stop()
 				except Exception as e:
 					logger.exception('Failed to initialize_stop() | %s' % e)
 
@@ -259,19 +276,33 @@ class StopTrail():
 					self.hopper += exit_amount
 					self.cursor = self.con.cursor()
 					self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper))
-					self.cursor.close()
-					self.con.commit()
 					logger.warn('New hopper total: %.4f' % self.hopper)
+					# check to see if we have any remaining thesholds, if so, output the next threshold value
+					self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+					result = self.cursor.fetchone()
+					remaining_rows = result[0]
+					if remaining_rows > 0:
+						self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
+						first_row = self.cursor.fetchone()
+						self.cursor.close()
+						next_threshold = first_row[1]
+						self.cursor.close()
+						self.con.commit()
+						logger.warn('Next threshold at: %.2f' % next_threshold)
+					else:
+						logger.warn('Final threshold hit.')
+						self.cursor.close()
+
 				except Exception as e:
 					logger.exception('Failed to update hopper | %s' % e)
 					raise #think about what we want to do when we can't update the hopper.. should we exit the script? 
 				
 			else:
-				#threshold = exit_price
 				logger.info('Price has not yet met the next threshold of ' + str(threshold))
 
 		else:
 			logger.info('No more values to add to hopper.')
+			threshold = None
 
 		return self.hopper, threshold
 
