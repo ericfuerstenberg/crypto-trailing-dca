@@ -5,6 +5,14 @@ Allows user to create an exit strategy including:
 1. Exit price (e.g., $600)
 2. Amount of coins to release at exit price (e.g., 0.5 ETH)
 
+| Exit Price | Amount (ETH) |
+|-----|------|
+| 600 | 0.25 |
+| 775 | 0.25 |
+| 925 | 0.50 |
+| 1080 | 1.0 |
+| 1250 | 1.5 |
+
 The bot will track the current price against the defined thresholds and release coins to be sold as thresholds are met. As new thresholds are hit, the bot will automatically increment a "hopper" to track the appropriate amount of coins to sell based on the defined exit strategy. When the market price drops below an established stop loss value, the bot will sell only the amount of coins that have been released into the hopper (i.e., those marked "available to sell"). 
 
 
