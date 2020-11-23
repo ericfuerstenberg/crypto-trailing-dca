@@ -1,11 +1,11 @@
 import ccxt
-from coinbasepro import CoinbasePro
 import config
-import time
 import datetime
+import logging
+import time
 import pandas as pd
 import sqlite3 as sl
-import logging
+from coinbasepro import CoinbasePro
 from crypto_bot_definitions import LOG_DIR
 from helper import get_logger, Config
 
