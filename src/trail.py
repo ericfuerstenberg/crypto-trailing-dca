@@ -21,9 +21,10 @@ from helper import get_logger, Config
 # 6b. 	DONE Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
 # 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	DONE When hopper changes, insert the new value into the database.
-# 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
-# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What id DB update fails and hopper doesn't reset?
+# 7. DONE? - Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
+# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
 # 9. Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
+# 9a. Secure ec2 instance - https://aws.amazon.com/premiumsupport/knowledge-center/ec2-ssh-best-practices/
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
 # 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
