@@ -1,15 +1,13 @@
 import ccxt
-from coinbasepro import CoinbasePro
 import config
-import time
 import datetime
+import logging
+import time
 import pandas as pd
 import sqlite3 as sl
-import logging
+from coinbasepro import CoinbasePro
 from crypto_bot_definitions import LOG_DIR
 from helper import get_logger, Config
-
-# PLEASE CONFIGURE API DETAILS IN config.py
 
 # To Do:
 # 1. DONE? - Instead of usin a static amount of funds, create a function to read from a dataframe, check against current price, and update a "holding pen/hopper" with more ETH as new thresholds are crossed (https://stackoverflow.com/questions/42285806/how-to-pop-rows-from-a-dataframe)
@@ -21,21 +19,22 @@ from helper import get_logger, Config
 # 6b. 	DONE Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
 # 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	DONE When hopper changes, insert the new value into the database.
-# 7. Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
-# 8. Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What id DB update fails and hopper doesn't reset?
-# 9. Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
+# 7. DONE - Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
+# 8. IN PROGRESS - Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
+# 9. IN PROGRESS - Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
+# 9a. 	DONE - Secure ec2 instance - https://aws.amazon.com/premiumsupport/knowledge-center/ec2-ssh-best-practices/
 # 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Guardrails around thresholds and selling below threshold price points we've already sold at??
 # 12. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
-# 13. DONE (did this in the script, no need for db table) - Create a "price" table to track the highs. For each market price check, compare against the table of known prices. Update the table when a new high price is seen and then return this new high price to the logger output (New high price observed: PRICE).
+# 14. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
 
+# Considerations:
+# 1. MINIMAL CONCERN (assuming exit thresholds are spaced logically) - The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
+# 2. MINIMAL CONCERN - It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
+# 3. DECIDED AGAINST THIS - Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
+# 3a. DECIDED AGAINST THIS - Then also maybe we should update the stoploss to tbe the next threshold value if threshold is hit but we haven't moved up to the next stoploss value? Avoid situation where we increase hopper but our stoploss is still set at an earlier threshold value?
+# 4. Decide on a restart strategy for the bot - do we want the systemd service to run constantly? To restart when it crashes? To restart only on reboot? etc. Think about implications. 
 
-
-# Other Notes:
-# 1. The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
-# 2. It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
-#3. DONE - Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
-# 3a. Then also maybe we should update the stoploss to tbe the next threshold value if threshold is hit but we haven't moved up to the next stoploss value? Avoid situation where we increase hopper but our stoploss is still set at an earlier threshold value?
 
 logger = get_logger(__file__)
 
@@ -134,7 +133,7 @@ class StopTrail():
 			
 			if self.type == "sell":
 				if price > self.tracked_price:
-					logger.warn('New high observed: %.2f' % price)
+					logger.warn('New high observed: %.2f' % price) # we may not need this - already returning this information when we update the stoploss
 					self.tracked_price = price
 				# logger.info(price - (price * self.stopsize))
 				# logger.info(self.stoploss)
@@ -197,7 +196,7 @@ class StopTrail():
 			raise
 		except ccxt.NetworkError as e:
 			logger.exception('Failed to execute sell order  | NETWORK ERROR | %s' % e)
-			raise #consider retrying for a network error? Resetting the stop loss? Think about how to protect ourselves from the exchange going down temporarily.	
+			raise ### IMPORTANT: consider retrying for a network error? Resetting the stop loss? Think about how to protect ourselves from the exchange going down temporarily.	
 		except Exception as e:
 			logger.exception('Failed to execute sell order | %s' % e)
 			raise
