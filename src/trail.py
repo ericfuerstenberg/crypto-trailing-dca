@@ -190,7 +190,7 @@ class StopTrail():
 			logger.warn("Attempting to sell %.8f %s at %.8f for %.8f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
 			self.coinbasepro.sell(self.market, self.hopper)
 			#sell_complete = self.coinbasepro.sell(self.market, self.hopper)
-			logger.warn("Sell successful")
+			logger.warn("Sell successful") # we need to call coinbase and get the exact value of the sell, use the order id
 
 			# if sell_complete: #trying to make sure that the database doesn't get updated unless a sell was actually executed, i.e. we have a value in sell_complete
 			# 	print('sell_complete = TRUE - YES')
@@ -343,6 +343,7 @@ class StopTrail():
 	def get_price(self):
 		try:
 			self.price = self.coinbasepro.get_price(self.market)
+			#self.price = float(input('TEST PRICE: ')) <-- this allows us to manually enter a TEST PRICE to validate script
 			return self.price
 		except Exception as e:
 			logging.error(e)
