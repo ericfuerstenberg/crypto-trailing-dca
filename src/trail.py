@@ -106,36 +106,33 @@ class StopTrail():
 
 	def initialize_stop(self):
 
+		#If stoploss is already set retrieve that value from the stoploss table. If not, set the stoploss from the market price.
 		self.stoploss_initialized = True
 		self.tracked_price = self.price
-		self.tracked_balance = self.balance
 		
-		#if the stoploss is set in the table, grab that value, if not, set the stoploss from the market price
 		if self.type == "buy":
-
-			#self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-			logger.warning('Starting USD balance: $%.2f' % self.balance)
-			
-			# enter logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 	
+			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
 			if self.balance > 1:
 				self.stoploss = (self.price + (self.price * self.stopsize))
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+				logger.warn('Starting USD balance: %.2f' % self.balance)
 				logger.warn('Stop loss initialized at: %.2f' % self.stoploss)
 				self.cursor.close()
 				self.con.commit()
 					
-				return self.stoploss, self.stoploss_initialized, self.tracked_price, self.tracked_balance
+				return self.stoploss, self.stoploss_initialized, self.tracked_price
 			
 			else: 
 				self.stoploss = None
 				self.stoploss_initialized = False
-				logger.info('No USD available. Waiting for deposit.')
+				logger.warn('No USD available. Waiting for deposit.')
 
-				return self.stoploss, self.stoploss_initialized, self.tracked_price, self.tracked_balance
+				return self.stoploss, self.stoploss_initialized, self.tracked_price
 
-		
-		else: #if self.type == "sell"
+
+		elif self.type == "sell": 
+			
 			self.stoploss = (self.price - (self.price * self.stopsize)) # this sets our first stoploss below our initial threshold value, will be less likely to get stopped out
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
@@ -168,7 +165,7 @@ class StopTrail():
 			elif self.type == "buy":
 				if self.balance > self.tracked_balance:
 					diff = self.balance - self.tracked_balance
-					logger.warn("Added %.2f to USD Balance. New total: %.2f" % (diff, self.balance))
+					logger.warn("Added %.2f USD to balance. New total: %.2f" % (diff, self.balance))
 					self.tracked_balance = self.balance
 
 				if self.price < self.tracked_price:
@@ -190,7 +187,7 @@ class StopTrail():
 						self.execute_buy()
 
 				else: 
-					logger.info('No USD available. Waiting for deposit.')
+					logger.warn('No USD available. Waiting for deposit.')
 		else:
 			logger.info('No stoploss yet initialized. Waiting.')
 
@@ -260,28 +257,19 @@ class StopTrail():
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
 			self.hopper = 0
+			logger.warn("Reset Hopper: " + str(self.hopper))
 
 			# reset stoploss after executing sell
 			self.stoploss = None
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			self.stoploss_initialized = False
+			logger.warn("Reset Stoploss: " + str(self.stoploss))
 
 			# add sell price to sold_at column for all rows included in the current hopper
 			self.cursor.execute("UPDATE thresholds SET sold_at = %.2f WHERE threshold_hit = 'Y' AND sold_at is null" % self.price)
 			logger.info("Updated sold_at column(s)!")
-
 			self.cursor.close()
 			self.con.commit()
-
-			logger.warn("Reset Hopper: " + str(self.hopper))
-			logger.warn("Reset Stoploss: " + str(self.stoploss))
-
-			#on successful sell, we need to set the new sell price column in our THRESHOLDS table (e.g., for all rows that are Y and don't have a sell price?)
-			###	thresh	amnt   hit	sell price
-			### 18000 	0.05 	Y 	 17654
-			### ------------------------------ <- hopper contains values below this line. update_hopper() changes 'Hit' column to Y when threshold was hit. After executing a sell, we have to insert the sell price for rows contained in the hopper.
-			### 19350	0.1		Y	 and insert sell price here
-			### 20100	0.1		Y	 insert sell price here  <- most recent sell
 
 		except ccxt.AuthenticationError as e:
 			logger.exception('Failed to execute sell order | AUTHENTICATION ERROR | %s' % str(e))
@@ -352,7 +340,6 @@ class StopTrail():
 			self.hopper = hopper_amount
 			return self.hopper
 			
-
 
 	def update_hopper(self):
 		self.cursor = self.con.cursor()
@@ -431,7 +418,7 @@ class StopTrail():
 		logger.info("Market: %s" % self.market)
 
 		if self.type == "sell":
-			logger.info("Available to sell: %.4f" % self.hopper)
+			logger.info("Available to sell: %.4f %s" % (self.hopper, self.market.split("/")[0]))
 		else: 
 			logger.info("Current USD balance: $%.2f" % self.balance)
 
