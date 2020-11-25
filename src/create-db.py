@@ -9,7 +9,8 @@ with con:
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             price INTEGER,
             amount INTEGER,
-            threshold_hit STRING
+            threshold_hit STRING,
+            sold_at REAL
         );
     """)
 
@@ -27,11 +28,12 @@ with con:
         );
     """)
 
-thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit) values(?, ?, ?, ?)'
+thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit, sold_at) values (?, ?, ?, ?, ?)'
 data1 = [
-    (1, 18420, 0.05, 'N'),
-    (2, 18590, 0.09, 'N'),
-    (3, 18700, 0.1, 'N')
+    (1, 18500, 0.05, 'N', None),
+    (2, 19500, 0.05, 'N', None),
+    (3, 20500, 0.05, 'N', None),
+    (4, 21500, 0.05, 'N', None)
 ]
 
 hopper = 'INSERT INTO hopper (id, amount) values (?, ?)'
