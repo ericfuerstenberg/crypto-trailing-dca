@@ -23,8 +23,8 @@ from helper import get_logger, Config
 # 8. IN PROGRESS - Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
 # 9. IN PROGRESS - Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
 # 9a. 	DONE - Secure ec2 instance - https://aws.amazon.com/premiumsupport/knowledge-center/ec2-ssh-best-practices/
+# 10. DONE - Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 
-# 10. Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
 # 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
 # 13. Build logic so that it won't execute a sell if the current price is lower than a previous stoploss that we've sold - KILL SWITCH!
@@ -170,18 +170,50 @@ class StopTrail():
 
 	def execute_sell(self):
 
-		# do a table lookup to find the most recent sold_at price
-		
+		# first, do a table lookup to find the most recent sold_at price
+		self.cursor = self.con.cursor()
+		last_threshold_sold_at = self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'Y' and sold_at is not null;").fetchall()
+		if last_threshold_sold_at:
+			last_sold_at_price = last_threshold_sold_at[-1][4]
+			# logger.info('current price: %s' % str(self.price))
+			# logger.info('last sold price: %s' % str(last_sold_at_price))
 
-		#killswitch = self.price < most_recent_sell_price
-		#kill switch logic here (if current price is lower than most recent sold_at price, do not execute a sell!)
-		#if killswitch:
-		# 	reset hopper
-		# 	reset stoploss
-		# 	reset threshold
-		#don't forget that you need to update all of the queries below to include any new table columns you add for the killswitch logic
+			killswitch = self.price < last_sold_at_price
+			logger.info('Killswitch: ' + str(killswitch))
 
-		#else: execute normal sell process
+			#kill switch logic here (if current price is lower than most recent sold_at price, do not execute a sell!)
+			if killswitch:
+				logger.warn('KILL SWITCH TRIGGERED!!!')
+				logger.warn('DANGER: The current market price %s is significantly below the last price we sold at: %s. Possible flash crash.' % (str(self.price), str(last_sold_at_price)))
+				logger.warn('The bot will not execute a sell under these conditions. Resetting and waiting for next price data from the exchange.')
+			# reset hopper
+				self.cursor = self.con.cursor()
+				self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
+				self.hopper = 0
+				logger.warn("Reset Hopper: " + str(self.hopper))
+			# reset stoploss
+				self.stoploss = None
+				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+				self.stoploss_initialized = False
+				logger.warn("Reset Stoploss: " + str(self.stoploss))
+			# reset threshold - find rows where threshold = Y but there is no sold_at value
+				self.cursor.execute("UPDATE thresholds SET threshold_hit = 'N' WHERE threshold_hit = 'Y' AND sold_at is null")
+				self.cursor.close()
+				self.con.commit()
+
+
+				#don't forget that you need to update all of the queries below to include any new table columns you add for the killswitch logic
+
+				self.run() #restart our loop. Don't execute sell. Instead, check prices again, etc. 
+				#self.running = False
+
+			else: #do I need an else here?
+				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
+
+		else:
+			print('No kill switch functionality needed - we havent sold anything yet')
+		self.cursor.close()
+
 
 		try:
 			# sell_complete = ""
@@ -207,7 +239,6 @@ class StopTrail():
 			self.stoploss_initialized = False
 
 			# add sell price to sold_at column for all rows included in the current hopper
-			#self.cursor.execute("INSERT INTO thresholds (sold_at) VALUES (?) where threshold_hit = 'Y' AND sold_at = Null", self.price)
 			self.cursor.execute("UPDATE thresholds SET sold_at = %.2f WHERE threshold_hit = 'Y' AND sold_at is null" % self.price)
 			logger.info("Updated sold_at column(s)!")
 
@@ -216,7 +247,6 @@ class StopTrail():
 
 			logger.warn("Reset Hopper: " + str(self.hopper))
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
-
 
 			#on successful sell, we need to set the new sell price column in our THRESHOLDS table (e.g., for all rows that are Y and don't have a sell price?)
 			###	thresh	amnt   hit	sell price
@@ -342,8 +372,8 @@ class StopTrail():
 
 	def get_price(self):
 		try:
-			self.price = self.coinbasepro.get_price(self.market)
-			#self.price = float(input('TEST PRICE: ')) <-- this allows us to manually enter a TEST PRICE to validate script
+			#self.price = self.coinbasepro.get_price(self.market)
+			self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
 			return self.price
 		except Exception as e:
 			logging.error(e)
