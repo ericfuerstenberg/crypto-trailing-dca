@@ -15,7 +15,7 @@ class CoinbasePro():
     def buy(self, market, amount, price):
         return (self.ccxtClient.create_order(
             symbol=market,
-            type="limit",
+            type="market", #maybe I can use 'funds' here to pass the total balance? how does this work on ccxt's end
             side="buy",
             amount=amount,
             price=price,
