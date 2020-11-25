@@ -27,9 +27,11 @@ from helper import get_logger, Config
 
 # 11. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
 # 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
-# 13. Build logic so that it won't execute a sell if the current price is lower than a previous stoploss that we've sold - KILL SWITCH!
+# 13. IN PROGRESS - Build logic so that it won't execute a sell if the current price is lower than a previous stoploss that we've sold - KILL SWITCH!
+# 13a. 	- Do we want a killswitch on our first threshold? This is not currently implemented. 
 # 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
 # 15. Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
+# 15a. 	ANSWER: Bitcoin, Bitcoin Cash, Litecoin and Ethereum values will have 8 decimal points and fiat currencies will have two.
 
 
 # Considerations:
@@ -149,21 +151,23 @@ class StopTrail():
 			elif self.type == "buy":
 				if self.price < self.tracked_price:
 					logger.warn('New low observed: %.2f' % self.price)
+
+				# enter logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 	
 				if (self.price + self.stopsize) < self.stoploss:
 					self.stoploss = self.price + self.stopsize
 					self.cursor = self.con.cursor()
 					self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 					self.cursor.close()
 					self.con.commit()
-					logger.warn("New low observed: Updating stop loss to %.8f" % self.stoploss)
+					logger.warn("Updated stop loss to %.8f" % self.stoploss)
 
 				elif self.price >= self.stoploss:
-					self.running = False
+					#self.running = False
 					balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-					#price = self.coinbasepro.get_price(self.market)
 					amount = (balance / self.price) * 0.999 # 0.10% maker/taker fee without BNB
-					self.coinbasepro.buy(self.market, amount, self.price)
+					self.coinbasepro.buy(self.market, amount, self.price) # need to move this to an execute_buy() function
 					logger.warn("Buy triggered | Price: %.8f | Stop loss: %.8f" % (self.price, self.stoploss))
+
 		else:
 			logger.info('No stoploss yet initialized. Waiting.')
 
@@ -184,7 +188,8 @@ class StopTrail():
 			#kill switch logic here (if current price is lower than most recent sold_at price, do not execute a sell!)
 			if killswitch:
 				logger.warn('KILL SWITCH TRIGGERED!!!')
-				logger.warn('DANGER: The current market price %s is significantly below the last price we sold at: %s. Possible flash crash.' % (str(self.price), str(last_sold_at_price)))
+				logger.warn('DANGER: POSSIBLE FLASH CRASH!!!')
+				logger.warn('Current market price %s is significantly below the last price we sold at: %s.' % (str(self.price), str(last_sold_at_price)))
 				logger.warn('The bot will not execute a sell under these conditions. Resetting and waiting for next price data from the exchange.')
 			# reset hopper
 				self.cursor = self.con.cursor()
@@ -211,7 +216,7 @@ class StopTrail():
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
 		else:
-			print('No kill switch functionality needed - we havent sold anything yet')
+			print('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
 		self.cursor.close()
 
 
@@ -219,7 +224,7 @@ class StopTrail():
 			# sell_complete = ""
 			logger.warn("Sell triggered | Current price: %.2f | Stop loss: %.8f" % (self.price, self.stoploss))
 			error_message = 'Failed to execute sell order'
-			logger.warn("Attempting to sell %.8f %s at %.8f for %.8f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
+			logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
 			self.coinbasepro.sell(self.market, self.hopper)
 			#sell_complete = self.coinbasepro.sell(self.market, self.hopper)
 			logger.warn("Sell successful") # we need to call coinbase and get the exact value of the sell, use the order id
