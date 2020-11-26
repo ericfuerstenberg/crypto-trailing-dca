@@ -247,7 +247,7 @@ class StopTrail():
 			logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
 			self.coinbasepro.sell(self.market, self.hopper)
 			#sell_complete = self.coinbasepro.sell(self.market, self.hopper)
-			logger.warn("Sell successful") # we need to call coinbase and get the exact value of the sell, use the order id
+			logger.warn("SELL SUCCESSFUL") # we need to call coinbase and get the exact value of the sell, use the order id
 
 			# if sell_complete: #trying to make sure that the database doesn't get updated unless a sell was actually executed, i.e. we have a value in sell_complete
 			# 	print('sell_complete = TRUE - YES')
@@ -297,7 +297,7 @@ class StopTrail():
 			logger.warn("Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("Executing market order (BUY) of ~%.8f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.balance), self.market.split("/")[1]))
 			output = self.coinbasepro.buy(self.market, amount, self.balance) #buy with our entire 
-			logger.warn("Buy successful!")
+			logger.warn("BUY SUCCESSFUL")
 			print(output)
 
 			# reset stoploss after executing sell
