@@ -75,11 +75,11 @@ If you are running in sell mode, it is assumed that you have already purchased t
 
 **Buy mode**
 
-If the **buy** option is set, the bot will initially place a stop-loss `size` % **above** the current market price. As the price goes lower, the stop-loss will get dragged with it, staying no higher than the size specified. Once the price crosses the stop-loss price, a buy order is executed.
+If the **buy** option is set, the bot will initially place a stop-loss (100 * `size`) % **above** the current market price (e.g., (100 * 0.05 = 5%)). As the price goes lower, the stop-loss will get dragged with it, staying no higher than the size specified. Once the price crosses the stop-loss price, a buy order is executed.
 
 **Sell mode**
 
-If the **sell** option is set, the bot will initially place a stop-loss `size` % **below** the current market price. As the price goes higher, the stop-loss will get dragged with it, staying no lower than the size specified. Once the price crosses the stop-loss price, a sell order is executed.
+If the **sell** option is set, the bot will initially place a stop-loss (100 * `size`) % **below** the current market price (e.g., (100 * 0.05 = 5%)). As the price goes higher, the stop-loss will get dragged with it, staying no lower than the size specified. Once the price crosses the stop-loss price, a sell order is executed.
 
 **Size**
 
