@@ -61,7 +61,7 @@ optional arguments:
   --interval INTERVAL  How often the bot should check for price changes (default 5 seconds)
 ```
 ```
-python3 main.py --symbol BTC/USD --size 0.05 --type sell
+$ python3 main.py --symbol BTC/USD --size 0.05 --type sell
 ```
 
 
