@@ -36,9 +36,9 @@ pip install ccxt
 
 ## Configure API keys
 
-Obtain an API key from CoinbasePro
+Obtain an API key from CoinbasePro with 'view' and 'trade' permissions enabled. 
 
-Then modify `/conf/settings.ini` and insert your API key and secret
+Then modify `/conf/settings.ini` and insert your API key, secret, and passcode.
 
 
 
@@ -60,12 +60,14 @@ optional arguments:
                        buying or selling mode. (Ex: 'buy' or 'sell')
   --interval INTERVAL  How often the bot should check for price changes (default 5 seconds)
 ```
-
+```
+python3 main.py --symbol BTC/USD --size 0.05 --type sell
+```
 
 
 **Important note**
 
-If you are running in sell mode, it is assumed that you have already purchased the coins. If you are running in buy mode, it will use the total available balance in the base (USDT, BTC, etc). I will likely add an option later to specify investment ratio.
+If you are running in sell mode, it is assumed that you have already purchased the coins. If you are running in buy mode, it will use the total available balance in the base (USDT, BTC, etc).
 
 
 
@@ -73,15 +75,15 @@ If you are running in sell mode, it is assumed that you have already purchased t
 
 **Buy mode**
 
-If the **buy** option is set, the bot will initially place a stop-loss `size` satoshis (or USD) **above** the current market price. As the price goes lower, the stop-loss will get dragged with it, staying no higher than the size specified. Once the price crosses the stop-loss price, a buy order is executed.
+If the **buy** option is set, the bot will initially place a stop-loss `size` % **above** the current market price. As the price goes lower, the stop-loss will get dragged with it, staying no higher than the size specified. Once the price crosses the stop-loss price, a buy order is executed.
 
 **Sell mode**
 
-If the **sell** option is set, the bot will initially place a stop-loss `size` satoshis (or USD) **below** the current market price. As the price goes higher, the stop-loss will get dragged with it, staying no lower than the size specified. Once the price crosses the stop-loss price, a sell order is executed.
+If the **sell** option is set, the bot will initially place a stop-loss `size` % **below** the current market price. As the price goes higher, the stop-loss will get dragged with it, staying no lower than the size specified. Once the price crosses the stop-loss price, a sell order is executed.
 
 **Size**
 
-This is the amount in satoshis (or USD) you would like the stop-loss to be retained at. The difference between the current price and stop-loss will never be larger than this amount.
+This is the percentage difference you would like the stop-loss to be retained at. The difference between the current price and stop-loss will never be larger than this amount.
 
 
 
