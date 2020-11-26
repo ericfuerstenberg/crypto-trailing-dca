@@ -27,11 +27,12 @@ from helper import get_logger, Config
 
 # 11. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
 # 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
-# 13. IN PROGRESS - Build logic so that it won't execute a sell if the current price is lower than a previous stoploss that we've sold - KILL SWITCH!
-# 13a. 	- Do we want a killswitch on our first threshold? This is not currently implemented. 
+# 13. DONE - Build logic so that it won't execute a sell if the current price is lower than a previous stoploss that we've sold - KILL SWITCH!
+# 13a. 	PASS ON THIS - Do we want a killswitch on our first threshold? This is not currently implemented. 
 # 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
-# 15. Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
+# 15. DONE - Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
 # 15a. 	ANSWER: Bitcoin, Bitcoin Cash, Litecoin and Ethereum values will have 8 decimal points and fiat currencies will have two.
+# 16. 
 
 
 # Considerations:
@@ -177,6 +178,8 @@ class StopTrail():
 		# first, do a table lookup to find the most recent sold_at price
 		self.cursor = self.con.cursor()
 		last_threshold_sold_at = self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'Y' and sold_at is not null;").fetchall()
+		self.cursor.close()
+
 		if last_threshold_sold_at:
 			last_sold_at_price = last_threshold_sold_at[-1][4]
 			# logger.info('current price: %s' % str(self.price))
@@ -194,31 +197,30 @@ class StopTrail():
 			# reset hopper
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
+				self.cursor.close()
 				self.hopper = 0
 				logger.warn("Reset Hopper: " + str(self.hopper))
 			# reset stoploss
 				self.stoploss = None
+				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+				self.cursor.close()
 				self.stoploss_initialized = False
 				logger.warn("Reset Stoploss: " + str(self.stoploss))
 			# reset threshold - find rows where threshold = Y but there is no sold_at value
+				self.cursor = self.con.cursor()
 				self.cursor.execute("UPDATE thresholds SET threshold_hit = 'N' WHERE threshold_hit = 'Y' AND sold_at is null")
 				self.cursor.close()
 				self.con.commit()
 
-
-				#don't forget that you need to update all of the queries below to include any new table columns you add for the killswitch logic
-
 				self.run() #restart our loop. Don't execute sell. Instead, check prices again, etc. 
-				#self.running = False
+
 
 			else: #do I need an else here?
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
 		else:
 			print('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
-		self.cursor.close()
-
 
 		try:
 			# sell_complete = ""
@@ -229,8 +231,9 @@ class StopTrail():
 			#sell_complete = self.coinbasepro.sell(self.market, self.hopper)
 			logger.warn("Sell successful") # we need to call coinbase and get the exact value of the sell, use the order id
 
-			# if sell_complete: #trying to make sure that the database doesn't get updated unless a sell was actually executed, i.e. we have a value in sell_complete
+			# if sell_complete returns a 200 from coinbase: #trying to make sure that the database doesn't get updated unless a sell was actually executed, i.e. we have a value in sell_complete
 			# 	print('sell_complete = TRUE - YES')
+			# if it doesn't return a 200
 
 			# reset hopper after executing sell
 			error_message = 'Failed to update exit_strategy.db after executing sell order'
@@ -252,13 +255,6 @@ class StopTrail():
 
 			logger.warn("Reset Hopper: " + str(self.hopper))
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
-
-			#on successful sell, we need to set the new sell price column in our THRESHOLDS table (e.g., for all rows that are Y and don't have a sell price?)
-			###	thresh	amnt   hit	sell price
-			### 18000 	0.05 	Y 	 17654
-			### ------------------------------ <- hopper contains values below this line. update_hopper() changes 'Hit' column to Y when threshold was hit. After executing a sell, we have to insert the sell price for rows contained in the hopper.
-			### 19350	0.1		Y	 and insert sell price here
-			### 20100	0.1		Y	 insert sell price here  <- most recent sell
 
 		except ccxt.AuthenticationError as e:
 			logger.exception('Failed to execute sell order | AUTHENTICATION ERROR | %s' % str(e))
@@ -377,8 +373,8 @@ class StopTrail():
 
 	def get_price(self):
 		try:
-			#self.price = self.coinbasepro.get_price(self.market)
-			self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
+			self.price = self.coinbasepro.get_price(self.market)
+			#self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
 			return self.price
 		except Exception as e:
 			logging.error(e)
