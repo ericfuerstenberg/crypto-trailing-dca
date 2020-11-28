@@ -107,7 +107,7 @@ class StopTrail():
 		
 		if self.type == "buy":
 			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
-			if self.balance > 1:
+			if self.hopper > 1:
 				self.stoploss = (self.price + (self.price * self.stopsize))
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
