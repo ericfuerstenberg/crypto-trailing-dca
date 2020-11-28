@@ -22,6 +22,13 @@ with con:
     """)
 
     con.execute("""
+        CREATE TABLE available_funds (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            amount INTEGER
+        );
+    """)   
+
+    con.execute("""
         CREATE TABLE stoploss (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             stop_value REAL
@@ -41,12 +48,18 @@ data2 = [
     (1, 0)
 ]
 
+available_funds = 'INSERT INTO available_funds (id, amount) values (?, ?)'
+data3= [
+    (1, 0)
+]
+
 stoploss = 'INSERT INTO stoploss (id, stop_value) values (?, ?)'
-data3 = [
+data4 = [
     (1, None)
 ]
 
 with con:
     con.executemany(thresholds, data1) 
     con.executemany(hopper, data2)
-    con.executemany(stoploss, data3)
+    con.executemany(available_funds, data3)
+    con.executemany(stoploss, data4)
