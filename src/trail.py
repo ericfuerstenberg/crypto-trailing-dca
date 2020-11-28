@@ -32,7 +32,6 @@ from helper import get_logger, Config
 # 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
 # 15. DONE - Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
 
-
 # Considerations:
 # 1. MINIMAL CONCERN (assuming exit thresholds are spaced logically) - The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
 # 2. MINIMAL CONCERN - It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
@@ -480,6 +479,7 @@ class StopTrail():
 					# initialize a stoploss, if one is not already initialized
 					if self.stoploss_initialized == False:
 						self.initialize_stop()
+            
 				except Exception as e:
 					logger.exception('Failed to initialize_stop() | %s' % e)
 
