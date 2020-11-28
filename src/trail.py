@@ -20,20 +20,17 @@ from helper import get_logger, Config
 # 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
 # 7a. 	DONE When hopper changes, insert the new value into the database.
 # 7. DONE - Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
-# 8. IN PROGRESS - Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
+# 8. DONE - Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
 # 9. IN PROGRESS - Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
 # 9a. 	DONE - Secure ec2 instance - https://aws.amazon.com/premiumsupport/knowledge-center/ec2-ssh-best-practices/
 # 10. DONE - Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
-
-# 11. Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
+# 11. IN PROGRESS - Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
 # 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
 # 13. DONE - Build logic so that it won't execute a sell if the current price is lower than a previous price that we've sold at - KILL SWITCH!
 # 13a. 	NOT WORTH EFFORT - Do we want a killswitch on our first threshold? This is not currently implemented. 
 # 13b. 	NOT WORTH EFFORT - NOTE: Killswitch will not save us if the price flash crashes, but we aren't below our most recent sell price. 
 # 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
 # 15. DONE - Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
-# 15a. 	ANSWER: Bitcoin, Bitcoin Cash, Litecoin and Ethereum values will have 8 decimal points and fiat currencies will have two.
-
 
 
 # Considerations:
@@ -85,8 +82,6 @@ class StopTrail():
 		#self.available_funds = self.initialize_hopper()
 			
 	def __del__(self):
-		logger.info('Inside __del__') 
-		logger.info('Deconstructing StopTrail() safely')
 		logger.warning('Program has exited.')
 		self.close_db()
 
@@ -213,20 +208,20 @@ class StopTrail():
 				logger.warn('DANGER: POSSIBLE FLASH CRASH!!!')
 				logger.warn('Current market price %s is significantly below the last price we sold at: %s.' % (str(self.price), str(last_sold_at_price)))
 				logger.warn('The bot will not execute a sell under these conditions. Resetting and waiting for next price data from the exchange.')
-			# reset hopper
+				# reset hopper
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (1, 0)")
 				self.cursor.close()
 				self.hopper = 0
 				logger.warn("Reset Hopper: " + str(self.hopper))
-			# reset stoploss
+				# reset stoploss
 				self.stoploss = None
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 				self.cursor.close()
 				self.stoploss_initialized = False
 				logger.warn("Reset Stoploss: " + str(self.stoploss))
-			# reset threshold - find rows where threshold = Y but there is no sold_at value
+				# reset threshold - find rows where threshold = Y but there is no sold_at value
 				self.cursor = self.con.cursor()
 				self.cursor.execute("UPDATE thresholds SET threshold_hit = 'N' WHERE threshold_hit = 'Y' AND sold_at is null")
 				self.cursor.close()
@@ -234,25 +229,45 @@ class StopTrail():
 
 				self.run() #restart our loop. Don't execute sell. Instead, check prices again, etc. 
 
-
 			else: #do I need an else here?
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
-		else:
-			print('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
+		#else:
+			#logger.info('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
 
+		# execute sell order, verify that sell posts and completes, then reset hopper, stoploss, and sold_at values
 		try:
-			# sell_complete = ""
-			logger.warn("Sell triggered | Current price: %.2f | Stop loss: %.8f" % (self.price, self.stoploss))
+			logger.warn("Sell triggered | Current price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			error_message = 'Failed to execute sell order'
-			logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
-			self.coinbasepro.sell(self.market, self.hopper)
-			#sell_complete = self.coinbasepro.sell(self.market, self.hopper)
-			logger.warn("SELL SUCCESSFUL") # we need to call coinbase and get the exact value of the sell, use the order id
-
-			# if sell_complete returns a 200 from coinbase: #trying to make sure that the database doesn't get updated unless a sell was actually executed, i.e. we have a value in sell_complete
-			# 	print('sell_complete = TRUE - YES')
-			# if it doesn't return a 200
+			#logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
+			#self.coinbasepro.sell(self.market, self.hopper)
+			sell_order = self.coinbasepro.sell(self.market, self.hopper)
+			#logger.info('sell order json: %s' % sell_order)
+			id = sell_order['info']['id']
+			pending = True
+			fetch_order = self.coinbasepro.get_order(id)
+			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+			while pending:
+				# logger.info(fetch_order)
+				# logger.info('id: %s' % id)
+				# logger.info('size: %s' % size)
+				# logger.info('price: %s' % price)
+				# logger.info('status: %s' % status)
+				# logger.info('done_reason: %s' % done_reason)
+				if status == 'done' and done_reason == 'filled': #verify what a successful order looks like
+					filled, sell_value, fee = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost']
+					pending = False
+					logger.warn("Sell order executed and filled successfully.")
+					logger.warn("Sold %.6f %s for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], sell_value, self.market.split("/")[1], fee))
+				elif status == 'done' and done_reason == 'cancelled':
+					pending = False
+					logger.warn('Sell order was canceled by exchange.')
+					#what does a successful sell look like?
+					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
+				else:	
+					time.sleep(2)
+					#if status is anything other than 'closed' or 'done', we want to 
+					#then wait like 2-3 seconds, check again?
 
 			# reset hopper after executing sell
 			error_message = 'Failed to update exit_strategy.db after executing sell order'
@@ -293,35 +308,43 @@ class StopTrail():
 	def execute_buy(self):
 
 		amount = 1 # will attempt to buy 1 BTC, which is effectively forcing us to use our full USD funds
-		approx_amount = ((self.balance / self.price) * 0.995)
+		approx_amount = ((self.hopper / self.price) * 0.995)
+		price = 1000000
 
 		try: 
 			logger.warn("Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
-			logger.warn("Executing market order (BUY) of ~%.8f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.balance), self.market.split("/")[1]))
-			output = self.coinbasepro.buy(self.market, amount, self.balance) #buy with our entire 
+			logger.warn("Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.hopper), self.market.split("/")[1]))
+			output = self.coinbasepro.buy(self.market, approx_amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
 			logger.warn("BUY SUCCESSFUL")
 			print(output)
 
-			# reset stoploss after executing sell
+			# reset stoploss after executing buy
 			self.stoploss = None
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			self.stoploss_initialized = False
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
+
+			# reset available_funds after executing buy
+			error_message = 'Failed to update exit_strategy.db after executing sell order'
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO available_funds (id, amount) VALUES (1, 0)")
+			self.hopper = 0
+			logger.warn("Reset available_funds: " + str(self.hopper))
 			self.cursor.close()
 			self.con.commit()
 		
 		except ccxt.AuthenticationError as e:
-			logger.error('Failed to execute sell order | AUTHENTICATION ERROR | %s' % str(e))
+			logger.error('Failed to execute sell order | Authentication error | %s' % str(e))
 			raise
 		except ccxt.InsufficientFunds as e:
-			logger.error('Failed to execute sell order  | INSUFFICIENT FUNDS | %s' % str(e))
+			logger.error('Failed to execute sell order  | Insufficient funds | %s' % str(e))
 			raise
 		except ccxt.BadRequest as e:
-			logger.error('Failed to execute sell order  | BAD REQUEST | %s' % str(e))
+			logger.error('Failed to execute sell order  | Bad request| %s' % str(e))
 			raise
 		except ccxt.NetworkError as e:
-			logger.error('Failed to execute sell order  | NETWORK ERROR | %s' % e)
+			logger.error('Failed to execute sell order  | Network error | %s' % e)
 			#raise ### we should not raise the exception here, we should let the script continue, which will result in a loop of network errors until it succeeds.
 		except Exception as e:
 			logger.error('%s | %s' % (error_message, e))
@@ -331,7 +354,7 @@ class StopTrail():
 	def initialize_hopper(self):
 		if self.type == "sell":
 			self.cursor = self.con.cursor()
-			self.cursor.execute("SELECT * FROM hopperß;")
+			self.cursor.execute("SELECT * FROM hopper ;")
 			first_row = self.cursor.fetchone()
 			self.cursor.close()
 			hopper_amount = first_row[1]
@@ -365,7 +388,7 @@ class StopTrail():
 			result = self.cursor.fetchone()
 			self.cursor.close()
 			remaining_rows = result[0]
-			logger.info('Thresholds remaining: ' + str(remaining_rows))
+			#logger.info('Thresholds remaining: ' + str(remaining_rows))
 
 			if remaining_rows > 0:
 				self.cursor = self.con.cursor()
@@ -400,6 +423,7 @@ class StopTrail():
 						self.cursor = self.con.cursor()
 						self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper))
 						logger.warn('New hopper total: %.4f' % self.hopper)
+						logger.warn('Thresholds remaining: %s' % (int(remaining_rows)-1))
 						# check to see if we have any remaining thesholds, if so, output the next threshold value
 						self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
 						result = self.cursor.fetchone()
@@ -430,7 +454,7 @@ class StopTrail():
 			return self.hopper, threshold
 
 
-		if self.type == 'buy': #now we need to update the available_funds table to add 'diff' to the total available_funds
+		if self.type == 'buy': #we need to update the available_funds table to add half of the new deposit to the total available_funds
 			if self.balance > self.tracked_balance:
 				new_deposit = self.balance - self.tracked_balance
 				logger.warn("%.2f USD was just added to account balance. New total: %.2f" % (new_deposit, self.balance))
@@ -458,7 +482,6 @@ class StopTrail():
 						self.initialize_stop()
 				except Exception as e:
 					logger.exception('Failed to initialize_stop() | %s' % e)
-
 
 			else:
 				logger.info('Nothing new to add to available_funds')
@@ -489,6 +512,7 @@ class StopTrail():
 	def get_price(self):
 		try:
 			self.price = self.coinbasepro.get_price(self.market)
+			### TURN ONTO TEST PRICE MANUALLY
 			#self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
 			return self.price
 		except Exception as e:

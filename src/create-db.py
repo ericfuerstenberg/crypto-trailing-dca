@@ -37,10 +37,10 @@ with con:
 
 thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit, sold_at) values (?, ?, ?, ?, ?)'
 data1 = [
-    (1, 16500, 0.05, 'N', None),
-    (2, 16900, 0.05, 'N', None),
-    (3, 20500, 0.05, 'N', None),
-    (4, 21500, 0.05, 'N', None)
+    (1, 14200, 0.05, 'N', None),
+    (2, 14900, 0.05, 'N', None),
+    (3, 15500, 0.05, 'N', None),
+    (4, 16500, 0.05, 'N', None)
 ]
 
 hopper = 'INSERT INTO hopper (id, amount) values (?, ?)'
