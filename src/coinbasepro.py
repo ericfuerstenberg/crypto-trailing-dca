@@ -34,3 +34,8 @@ class CoinbasePro():
 
     def get_balance(self, coin):
         return float(self.ccxtClient.fetch_balance()[coin]['free'])
+
+    def get_order(self, id):
+        return (self.ccxtClient.fetch_order(
+            id=id
+        ))
