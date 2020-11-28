@@ -26,9 +26,9 @@ from helper import get_logger, Config
 # 10. DONE - Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
 # 11. IN PROGRESS - Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
 # 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
-# 13. IN PROGRESS - Build logic so that it won't execute a sell if the current price is lower than a previous price that we've sold at - KILL SWITCH!
-# 13a. 	- Do we want a killswitch on our first threshold? This is not currently implemented. 
-# 13b. 	- NOTE: Killswitch will not save us if the price flash crashes, but we aren't below our most recent sell price. 
+# 13. DONE - Build logic so that it won't execute a sell if the current price is lower than a previous price that we've sold at - KILL SWITCH!
+# 13a. 	NOT WORTH EFFORT - Do we want a killswitch on our first threshold? This is not currently implemented. 
+# 13b. 	NOT WORTH EFFORT - NOTE: Killswitch will not save us if the price flash crashes, but we aren't below our most recent sell price. 
 # 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
 # 15. DONE - Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
 
@@ -78,6 +78,7 @@ class StopTrail():
 			self.stoploss_initialized = False
 
 		self.hopper = self.initialize_hopper()
+		#self.available_funds = self.initialize_hopper()
 			
 	def __del__(self):
 		logger.warning('Program has exited.')
@@ -107,11 +108,11 @@ class StopTrail():
 		
 		if self.type == "buy":
 			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
-			if self.balance > 1:
+			if self.hopper > 1:
 				self.stoploss = (self.price + (self.price * self.stopsize))
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
-				logger.warn('Starting USD balance: %.2f' % self.balance)
+				#logger.warn('Starting USD balance: %.2f' % self.balance)
 				logger.warn('Stop loss initialized at: %.2f' % self.stoploss)
 				self.cursor.close()
 				self.con.commit()
@@ -158,10 +159,10 @@ class StopTrail():
 					self.execute_sell()
 
 			elif self.type == "buy":
-				if self.balance > self.tracked_balance:
-					diff = self.balance - self.tracked_balance
-					logger.warn("Added %.2f USD to balance. New total: %.2f" % (diff, self.balance))
-					self.tracked_balance = self.balance
+				# if self.balance > self.tracked_balance:
+				# 	diff = self.balance - self.tracked_balance
+				# 	logger.warn("Added %.2f USD to balance. New total: %.2f" % (diff, self.balance))
+				# 	self.tracked_balance = self.balance
 
 				if self.price < self.tracked_price:
 					logger.warn('New low observed: %.2f' % self.price)
@@ -196,8 +197,6 @@ class StopTrail():
 
 		if last_threshold_sold_at:
 			last_sold_at_price = last_threshold_sold_at[-1][4]
-			# logger.info('current price: %s' % str(self.price))
-			# logger.info('last sold price: %s' % str(last_sold_at_price))
 
 			killswitch = self.price < last_sold_at_price
 			logger.info('Killswitch: ' + str(killswitch))
@@ -308,8 +307,6 @@ class StopTrail():
 	def execute_buy(self):
 
 		amount = 1 # will attempt to buy 1 BTC, which is effectively forcing us to use our full USD funds
-		print('self.hopper: %s' % self.hopper)
-		print('self.price: %s' % self.price)
 		approx_amount = ((self.hopper / self.price) * 0.995)
 		price = 1000000
 
@@ -367,7 +364,6 @@ class StopTrail():
 			self.hopper = hopper_amount
 			return self.hopper
 
-
 		if self.type == "buy": # thinking about how I can accurately keep track of available USD when buying both ETH and BTC. Split deposit amount into separate hoppers, read from hoppers specific to each coin to determine how much USD to use to buy.
 			self.cursor = self.con.cursor()
 			#self.cursor.execute("SELECT * FROM available_funds WHERE coin = ?", (self.coin))
@@ -384,14 +380,14 @@ class StopTrail():
 			
 
 	def update_hopper(self):
-		self.cursor = self.con.cursor()
-		self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
-		result = self.cursor.fetchone()
-		self.cursor.close()
-		remaining_rows = result[0]
-		logger.info('Thresholds remaining: ' + str(remaining_rows))
-
+		
 		if self.type == 'sell':
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+			result = self.cursor.fetchone()
+			self.cursor.close()
+			remaining_rows = result[0]
+			#logger.info('Thresholds remaining: ' + str(remaining_rows))
 
 			if remaining_rows > 0:
 				self.cursor = self.con.cursor()
@@ -473,15 +469,17 @@ class StopTrail():
 					self.cursor.execute("REPLACE INTO available_funds (id, amount) VALUES (?, ?)", (1, self.hopper))
 					self.cursor.close()
 					self.con.commit()
-					logger.warn('Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.hopper, self.market.split("/")[1])) 
+					logger.warn('Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.hopper, self.market.split("/")[1]))				
+
 				except Exception as e:
 					logger.exception('Failed to update available_funds table | %s' % e)
 					raise #think about what we want to do when we can't update the hopper.. should we exit the script?
-					
+
 				try:	
 					# initialize a stoploss, if one is not already initialized
 					if self.stoploss_initialized == False:
 						self.initialize_stop()
+            
 				except Exception as e:
 					logger.exception('Failed to initialize_stop() | %s' % e)
 
@@ -497,7 +495,9 @@ class StopTrail():
 		if self.type == "sell":
 			logger.info("Available to sell: %.4f %s" % (self.hopper, self.market.split("/")[0]))
 		else: 
-			logger.info("Current USD balance: $%.2f" % self.balance)
+			logger.info("Total USD balance: $%.2f" % self.balance)
+			logger.info("USD available to purchase %s: $%.2f" % (self.market.split("/")[0], self.hopper))
+
 
 		if self.stoploss_initialized is True:
 			logger.info("Stop loss: %.2f" % self.stoploss)
@@ -547,4 +547,5 @@ class StopTrail():
 						self.get_balance()
 						self.print_status()
 						self.update_stop()
+						self.update_hopper()
 			time.sleep(self.interval)
