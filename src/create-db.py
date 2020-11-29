@@ -24,7 +24,8 @@ with con:
     con.execute("""
         CREATE TABLE available_funds (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            amount INTEGER
+            account_balance INTEGER,
+            coin_hopper INTEGER
         );
     """)   
 
@@ -48,9 +49,9 @@ data2 = [
     (1, 0)
 ]
 
-available_funds = 'INSERT INTO available_funds (id, amount) values (?, ?)'
+available_funds = 'INSERT INTO available_funds (id, account_balance, coin_hopper) values (?, ?, ?)'
 data3= [
-    (1, 0)
+    (1, 0, 0)
 ]
 
 stoploss = 'INSERT INTO stoploss (id, stop_value) values (?, ?)'
