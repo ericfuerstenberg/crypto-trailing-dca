@@ -78,7 +78,7 @@ class StopTrail():
 			self.stoploss_initialized = False
 
 		self.hopper = self.initialize_hopper()
-		#self.available_funds = self.initialize_hopper()
+
 			
 	def __del__(self):
 		logger.warning('Program has exited.')
@@ -108,7 +108,7 @@ class StopTrail():
 		
 		if self.type == "buy":
 			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
-			if self.hopper > 1:
+			if self.coin_hopper > 1:
 				self.stoploss = (self.price + (self.price * self.stopsize))
 				self.cursor = self.con.cursor()
 				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
@@ -122,7 +122,7 @@ class StopTrail():
 			else: 
 				self.stoploss = None
 				self.stoploss_initialized = False
-				logger.warn('No USD available. Waiting for deposit.')
+				logger.warn('No USD allocated to purchase %s. Waiting for deposit.' % self.market.split("/")[0])
 
 				return self.stoploss, self.stoploss_initialized, self.tracked_price
 
@@ -307,15 +307,40 @@ class StopTrail():
 	def execute_buy(self):
 
 		amount = 1 # will attempt to buy 1 BTC, which is effectively forcing us to use our full USD funds
-		approx_amount = ((self.hopper / self.price) * 0.995)
+		approx_amount = ((self.coin_hopper / self.price) * 0.995)
 		price = 1000000
-
+		
 		try: 
-			logger.warn("Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
-			logger.warn("Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.hopper), self.market.split("/")[1]))
-			output = self.coinbasepro.buy(self.market, approx_amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
-			logger.warn("BUY SUCCESSFUL")
-			print(output)
+			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
+			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
+			buy_order = self.coinbasepro.buy(self.market, approx_amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
+
+			#logger.info('sell order json: %s' % buy_order)
+			id = buy_order['info']['id']
+			pending = True
+			fetch_order = self.coinbasepro.get_order(id)
+			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+			while pending:
+				#logger.info(fetch_order)
+				# logger.info('id: %s' % id)
+				# logger.info('size: %s' % size)
+				# logger.info('price: %s' % price)
+				# logger.info('status: %s' % status)
+				# logger.info('done_reason: %s' % done_reason)
+				if status == 'done' and done_reason == 'filled': #verify what a successful order looks like
+					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
+					pending = False
+					logger.warn("ORDER: Buy order executed and filled successfully.")
+					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
+				elif status == 'done' and done_reason == 'cancelled':
+					pending = False
+					logger.warn('Buy order was canceled by exchange.')
+					#what does a successful sell look like?
+					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
+				else:	
+					time.sleep(2)
+					#if status is anything other than 'closed' or 'done', we want to 
+					#then wait like 2-3 seconds, check again?
 
 			# reset stoploss after executing buy
 			self.stoploss = None
@@ -324,12 +349,15 @@ class StopTrail():
 			self.stoploss_initialized = False
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
 
-			# reset available_funds after executing buy
+			# reset coin_hopper after executing buy
 			error_message = 'Failed to update exit_strategy.db after executing sell order'
 			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, amount) VALUES (1, 0)")
-			self.hopper = 0
-			logger.warn("Reset available_funds: " + str(self.hopper))
+			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
+			self.coin_hopper = 0
+			logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
+			#logger.warn("Updated account balance: " + str(self.coin_hopper))
+
+			#also reset the account_balance value? or should I wait for next get_balance loop to start?
 			self.cursor.close()
 			self.con.commit()
 		
@@ -349,6 +377,7 @@ class StopTrail():
 			logger.error('%s | %s' % (error_message, e))
 			raise
 
+	
 
 	def initialize_hopper(self):
 		if self.type == "sell":
@@ -364,20 +393,6 @@ class StopTrail():
 			self.hopper = hopper_amount
 			return self.hopper
 
-		if self.type == "buy": # thinking about how I can accurately keep track of available USD when buying both ETH and BTC. Split deposit amount into separate hoppers, read from hoppers specific to each coin to determine how much USD to use to buy.
-			self.cursor = self.con.cursor()
-			#self.cursor.execute("SELECT * FROM available_funds WHERE coin = ?", (self.coin))
-			self.cursor.execute("SELECT * FROM available_funds;")
-			row = self.cursor.fetchone()
-			self.cursor.close()
-			available_funds = row[1]
-			if available_funds > 0:
-				logger.warn('Retrieved available_funds data from table: %.4f' % available_funds)
-			else:
-				logger.info('No "available funds" value previously set for %s. available_funds set to 0' % self.market.split("/")[0])
-			self.hopper = available_funds
-			return self.hopper
-			
 
 	def update_hopper(self):
 		
@@ -453,40 +468,6 @@ class StopTrail():
 			return self.hopper, threshold
 
 
-		if self.type == 'buy': #we need to update the available_funds table to add half of the new deposit to the total available_funds
-			if self.balance > self.tracked_balance:
-				new_deposit = self.balance - self.tracked_balance
-				logger.warn("%.2f USD was just added to account balance. New total: %.2f" % (new_deposit, self.balance))
-				self.tracked_balance = self.balance
-
-				try:	
-					# write the new hopper value to the hopper table
-					logger.warn('Allocating half of this new deposit for ETH and half for BTC.')
-					half = new_deposit * 0.5
-					logger.info('New Deposit / 2: %.2f' % half)
-					self.hopper += half
-					self.cursor = self.con.cursor()
-					self.cursor.execute("REPLACE INTO available_funds (id, amount) VALUES (?, ?)", (1, self.hopper))
-					self.cursor.close()
-					self.con.commit()
-					logger.warn('Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.hopper, self.market.split("/")[1]))				
-
-				except Exception as e:
-					logger.exception('Failed to update available_funds table | %s' % e)
-					raise #think about what we want to do when we can't update the hopper.. should we exit the script?
-
-				try:	
-					# initialize a stoploss, if one is not already initialized
-					if self.stoploss_initialized == False:
-						self.initialize_stop()
-            
-				except Exception as e:
-					logger.exception('Failed to initialize_stop() | %s' % e)
-
-			else:
-				logger.info('Nothing new to add to available_funds')
-
-
 	def print_status(self):
 		logger.info("---------------------")
 		logger.info("Trail type: %s" % self.type)
@@ -496,8 +477,8 @@ class StopTrail():
 			logger.info("Available to sell: %.4f %s" % (self.hopper, self.market.split("/")[0]))
 		else: 
 			logger.info("Total USD balance: $%.2f" % self.balance)
-			logger.info("USD available to purchase %s: $%.2f" % (self.market.split("/")[0], self.hopper))
-
+			if self.balance > 50:
+				logger.info("%s available to purchase %s: $%.2f" % (self.market.split("/")[1], self.market.split("/")[0], self.coin_hopper))
 
 		if self.stoploss_initialized is True:
 			logger.info("Stop loss: %.2f" % self.stoploss)
@@ -521,10 +502,49 @@ class StopTrail():
 
 
 	def get_balance(self):
-		# logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 
+		# get coinbase balance
 		self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-	
-		if self.balance > 0: #if we have a balance, let's initialize a stoploss, else, continue
+
+		# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
+		# get last_known_balance from the available_funds table
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM available_funds;")
+		first_row = self.cursor.fetchone()
+		self.cursor.close()
+		last_known_account_balance = first_row[1]
+		self.coin_hopper = first_row[2]
+
+		# take the difference between the coinbase balance and the last_known_account_balance
+		difference = self.balance - last_known_account_balance
+
+		if difference > 0:
+			#take half of the newly deposited USD and allocate to the coin_hopper
+			half_of_deposit = difference * 0.5
+			self.coin_hopper += half_of_deposit
+
+			# replace the last known account balance with the balance from coinbase
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+			self.cursor.close()
+			self.con.commit()
+			logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
+			logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+
+		elif difference < 0: 
+			# do nothing with the coin hopper
+			# update the last known account balance to reflect balance in coinbase
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+			self.cursor.close()
+			self.con.commit()
+			logger.info('elif difference < 0, self.coin_hopper: %.4f' % self.coin_hopper)
+			logger.warn("REMOVED: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+
+		elif difference == 0:
+			logger.info('No new deposit.')
+
+		if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
 			try:	
 				# initialize a stoploss, if one is not already initialized
 				if self.stoploss_initialized == False:
@@ -532,7 +552,28 @@ class StopTrail():
 			except Exception as e:
 					('Failed to initialize_stop() | %s' % e)
 
-		return self.balance
+		else:
+			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
+		return self.balance, self.coin_hopper
+
+		# else:
+		# 	logger.info('Coinbase account balance is too low to satisfy minumum order size requirements. Waiting for additional deposit.')
+		
+		# return self.balance# self.coin_hopper
+
+		# # logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 
+		# self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+	
+		# if self.balance > 0: #if we have a balance, let's initialize a stoploss, else, continue
+		# 	try:	
+		# 		# initialize a stoploss, if one is not already initialized
+		# 		if self.stoploss_initialized == False:
+		# 			self.initialize_stop()
+		# 	except Exception as e:
+		# 			('Failed to initialize_stop() | %s' % e)
+
+		# return self.balance
 
 	def run(self):
 		self.running = True
@@ -547,5 +588,5 @@ class StopTrail():
 						self.get_balance()
 						self.print_status()
 						self.update_stop()
-						self.update_hopper()
+						#self.update_hopper()
 			time.sleep(self.interval)
