@@ -1,0 +1,10 @@
+[Unit]
+Description=crypto-trailing-buy systemd service.
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/bin/crypto-trailing-buy.sh
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target
