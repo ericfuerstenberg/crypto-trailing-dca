@@ -86,9 +86,9 @@ class StopTrail():
 
 	def __exit__(self, exc_type, exc_value, traceback): 
 		logger.info('Inside __exit__') 
-		logger.info('Execution type:', exc_type) 
-		logger.info('Execution value:', exc_value) 
-		logger.info('Traceback:', traceback) 
+		# logger.info('Execution type:', exc_type) 
+		# logger.info('Execution value:', exc_value) 
+		# logger.info('Traceback:', traceback) 
 		logger.warning('Program has exited.')
 		self.close_db()
 
@@ -237,11 +237,10 @@ class StopTrail():
 		# execute sell order, verify that sell posts and completes, then reset hopper, stoploss, and sold_at values
 		try:
 			logger.warn("Sell triggered | Current price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
+			logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
 			error_message = 'Failed to execute sell order'
-			#logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
-			#self.coinbasepro.sell(self.market, self.hopper)
+
 			sell_order = self.coinbasepro.sell(self.market, self.hopper)
-			#logger.info('sell order json: %s' % sell_order)
 			id = sell_order['info']['id']
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
@@ -261,7 +260,6 @@ class StopTrail():
 				elif status == 'done' and done_reason == 'cancelled':
 					pending = False
 					logger.warn('Sell order was canceled by exchange.')
-					#what does a successful sell look like?
 					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
 				else:	
 					time.sleep(2)
@@ -306,14 +304,13 @@ class StopTrail():
 
 	def execute_buy(self):
 
-		amount = 1 # will attempt to buy 1 BTC, which is effectively forcing us to use our full USD funds
-		approx_amount = ((self.coin_hopper / self.price) * 0.995)
+		amount = ((self.coin_hopper / self.price) * 0.995)
 		price = 1000000
 		
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
-			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (approx_amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
-			buy_order = self.coinbasepro.buy(self.market, approx_amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
+			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
+			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
 
 			#logger.info('sell order json: %s' % buy_order)
 			id = buy_order['info']['id']
@@ -321,7 +318,7 @@ class StopTrail():
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
 			while pending:
-				#logger.info(fetch_order)
+				# logger.info(fetch_order)
 				# logger.info('id: %s' % id)
 				# logger.info('size: %s' % size)
 				# logger.info('price: %s' % price)
@@ -332,12 +329,13 @@ class StopTrail():
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
-				elif status == 'done' and done_reason == 'cancelled':
+				elif status == 'done' and done_reason == 'canceled':
 					pending = False
 					logger.warn('Buy order was canceled by exchange.')
 					#what does a successful sell look like?
 					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
 				else:	
+					logger.info('waiting')
 					time.sleep(2)
 					#if status is anything other than 'closed' or 'done', we want to 
 					#then wait like 2-3 seconds, check again?
@@ -530,6 +528,7 @@ class StopTrail():
 			logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
 			logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
 			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+			logger.warn('Market price at time of deposit: %.2f' % self.price)
 
 		elif difference < 0: 
 			# do nothing with the coin hopper
@@ -538,7 +537,6 @@ class StopTrail():
 			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
 			self.cursor.close()
 			self.con.commit()
-			logger.info('elif difference < 0, self.coin_hopper: %.4f' % self.coin_hopper)
 			logger.warn("REMOVED: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
 		elif difference == 0:
