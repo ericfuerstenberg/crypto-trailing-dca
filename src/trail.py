@@ -423,7 +423,7 @@ class StopTrail():
 					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
 					logger.warn('price_at_buy: %.2f' % filled_price)
 
-					if self.price < price_at_deposit:
+					if filled_price < price_at_deposit:
 						win_count += 1
 						logger.warn("WIN: Bought at a lower price than at deposit time! :)")
 					
