@@ -48,12 +48,14 @@ class StopTrail():
 
 		logger.warning('Initializing bot...')
 
+		# establish a connection with exchange
 		self.coinbasepro = CoinbasePro(
 			api_key=Config.get_value('api','api_key'),
 			api_secret=Config.get_value('api','api_secret'),
 			password=Config.get_value('api','password')
 		)
 		
+		# set our variables
 		self.market = market
 		self.type = type
 		self.stopsize = stopsize
@@ -62,7 +64,7 @@ class StopTrail():
 		self.tracked_price = self.coinbasepro.get_price(self.market)
 		self.tracked_balance = self.coinbasepro.get_balance(self.market.split("/")[1])
 		
-		#Open db connection and check for a persisted stoploss value
+		# open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
 		self.cursor = self.con.cursor()
 		self.cursor.execute("SELECT * FROM stoploss;")
@@ -76,7 +78,6 @@ class StopTrail():
 		else:
 			logger.info('No stoploss currently set')
 			self.stoploss_initialized = False
-
 		self.hopper = self.initialize_hopper()
 
 			
@@ -84,11 +85,9 @@ class StopTrail():
 		logger.warning('Program has exited.')
 		self.close_db()
 
+
 	def __exit__(self, exc_type, exc_value, traceback): 
 		logger.info('Inside __exit__') 
-		# logger.info('Execution type:', exc_type) 
-		# logger.info('Execution value:', exc_value) 
-		# logger.info('Traceback:', traceback) 
 		logger.warning('Program has exited.')
 		self.close_db()
 
@@ -112,11 +111,11 @@ class StopTrail():
 			else:
 				logger.info('No hopper previously set. Starting at 0.')
 			self.hopper = hopper_amount
+
 			return self.hopper
 
 
 	def update_hopper(self):
-		
 		if self.type == 'sell':
 			self.cursor = self.con.cursor()
 			self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
@@ -190,7 +189,6 @@ class StopTrail():
 
 
 	def initialize_stop(self):
-
 		#If stoploss is already set retrieve that value from the stoploss table. If not, set the stoploss from the market price.
 		self.stoploss_initialized = True
 		self.tracked_price = self.price
@@ -218,7 +216,7 @@ class StopTrail():
 
 		elif self.type == "sell": 
 			
-			self.stoploss = (self.price - (self.price * self.stopsize)) # this sets our first stoploss below our initial threshold value, will be less likely to get stopped out
+			self.stoploss = (self.price - (self.price * self.stopsize)) 
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			logger.warn('Stop loss initialized at: ' + str(self.stoploss))
@@ -233,7 +231,7 @@ class StopTrail():
 			
 			if self.type == "sell":
 				if self.price > self.tracked_price:
-					logger.warn('New high observed: %.2f' % self.price) # we may not need this - already returning this information when we update the stoploss
+					logger.warn('New high observed: %.2f' % self.price)
 					self.tracked_price = self.price
 
 				if (self.price - (self.price * self.stopsize)) > self.stoploss:
@@ -248,11 +246,6 @@ class StopTrail():
 					self.execute_sell()
 
 			elif self.type == "buy":
-				# if self.balance > self.tracked_balance:
-				# 	diff = self.balance - self.tracked_balance
-				# 	logger.warn("Added %.2f USD to balance. New total: %.2f" % (diff, self.balance))
-				# 	self.tracked_balance = self.balance
-
 				if self.price < self.tracked_price:
 					logger.warn('New low observed: %.2f' % self.price)
 					self.tracked_price = self.price
@@ -278,7 +271,6 @@ class StopTrail():
 
 
 	def execute_sell(self):
-
 		# first, do a table lookup to find the most recent sold_at price
 		self.cursor = self.con.cursor()
 		last_threshold_sold_at = self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'Y' and sold_at is not null;").fetchall()
@@ -292,7 +284,6 @@ class StopTrail():
 
 			#kill switch logic here (if current price is lower than most recent sold_at price, do not execute a sell!)
 			if killswitch:
-				logger.warn('KILL SWITCH TRIGGERED!!!')
 				logger.warn('DANGER: POSSIBLE FLASH CRASH!!!')
 				logger.warn('Current market price %s is significantly below the last price we sold at: %s.' % (str(self.price), str(last_sold_at_price)))
 				logger.warn('The bot will not execute a sell under these conditions. Resetting and waiting for next price data from the exchange.')
@@ -314,10 +305,10 @@ class StopTrail():
 				self.cursor.execute("UPDATE thresholds SET threshold_hit = 'N' WHERE threshold_hit = 'Y' AND sold_at is null")
 				self.cursor.close()
 				self.con.commit()
+ 				# restart our loop. Don't execute sell. Instead, check prices again, etc. 
+				self.run()
 
-				self.run() #restart our loop. Don't execute sell. Instead, check prices again, etc. 
-
-			else: #do I need an else here?
+			else: 
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
 		#else:
@@ -392,7 +383,6 @@ class StopTrail():
 
 
 	def execute_buy(self):
-
 		amount = ((self.coin_hopper / self.price) * 0.995)
 		price = 1000000
 		error_message = 'Failed to execute buy order'
@@ -420,8 +410,8 @@ class StopTrail():
 					logger.warn("ORDER: Buy order executed and filled successfully.")
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
 
-					#update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
-					#output whether buy was a win, display % of buys that are wins
+					# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
+					# output whether buy was a win, display % of buys that are wins
 					self.cursor = self.con.cursor()
 					self.cursor.execute("SELECT * FROM win_tracker;")
 					data = self.cursor.fetchone()
@@ -570,8 +560,8 @@ class StopTrail():
 			self.con.commit()
 			logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
-		elif difference == 0:
-			logger.info('No new deposit.')
+		#elif difference == 0:
+			#logger.info('No new deposit.')
 
 		if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
 			try:	
