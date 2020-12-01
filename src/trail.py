@@ -100,6 +100,95 @@ class StopTrail():
 			 logger.info('Database closed')
 			
 
+	def initialize_hopper(self):
+		if self.type == "sell":
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT * FROM hopper ;")
+			first_row = self.cursor.fetchone()
+			self.cursor.close()
+			hopper_amount = first_row[1]
+			if hopper_amount > 0:
+				logger.warn('Hopper already set at: %.4f' % hopper_amount)
+			else:
+				logger.info('No hopper previously set. Starting at 0.')
+			self.hopper = hopper_amount
+			return self.hopper
+
+
+	def update_hopper(self):
+		
+		if self.type == 'sell':
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+			result = self.cursor.fetchone()
+			self.cursor.close()
+			remaining_rows = result[0]
+			#logger.info('Thresholds remaining: ' + str(remaining_rows))
+
+			if remaining_rows > 0:
+				self.cursor = self.con.cursor()
+				self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
+				first_row = self.cursor.fetchone()
+				self.cursor.close()
+				threshold = first_row[1]
+				exit_amount = first_row[2]
+				
+				if self.price >= threshold:
+					try:
+						# update our threshold table to indicate that a new threshold has been hit
+						row_id = str(first_row[0])
+						self.cursor = self.con.cursor()
+						self.cursor.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
+						self.cursor.close()
+						self.con.commit()
+					except Exception as e:
+						logger.exception('Failed to update exit_strategy.db threshold table | %s' % e)
+						
+					try:	
+						# initialize a stoploss, if one is not already initialized
+						if self.stoploss_initialized == False:
+							self.initialize_stop()
+					except Exception as e:
+						logger.exception('Failed to initialize_stop() | %s' % e)
+
+					try:	
+						# write the new hopper value to the hopper table
+						logger.warn('Hit our threshold at ' + str(threshold) + '. Adding ' + str(exit_amount) + ' to hopper.')
+						self.hopper += exit_amount
+						self.cursor = self.con.cursor()
+						self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper))
+						logger.warn('New hopper total: %.4f' % self.hopper)
+						logger.warn('Thresholds remaining: %s' % (int(remaining_rows)-1))
+						# check to see if we have any remaining thesholds, if so, output the next threshold value
+						self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
+						result = self.cursor.fetchone()
+						remaining_rows = result[0]
+						if remaining_rows > 0:
+							self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
+							first_row = self.cursor.fetchone()
+							self.cursor.close()
+							next_threshold = first_row[1]
+							self.cursor.close()
+							self.con.commit()
+							logger.warn('Next threshold at: %.2f' % next_threshold)
+						else:
+							logger.warn('Final threshold hit.')
+							self.cursor.close()
+
+					except Exception as e:
+						logger.exception('Failed to update hopper | %s' % e)
+						raise #think about what we want to do when we can't update the hopper.. should we exit the script? 
+					
+				else:
+					logger.info('Price has not yet met the next threshold of ' + str(threshold))
+
+			else:
+				logger.info('No more values to add to hopper.')
+				threshold = None
+
+			return self.hopper, threshold
+
+
 	def initialize_stop(self):
 
 		#If stoploss is already set retrieve that value from the stoploss table. If not, set the stoploss from the market price.
@@ -306,7 +395,8 @@ class StopTrail():
 
 		amount = ((self.coin_hopper / self.price) * 0.995)
 		price = 1000000
-		
+		error_message = 'Failed to execute buy order'
+
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
@@ -324,21 +414,48 @@ class StopTrail():
 				# logger.info('price: %s' % price)
 				# logger.info('status: %s' % status)
 				# logger.info('done_reason: %s' % done_reason)
-				if status == 'done' and done_reason == 'filled': #verify what a successful order looks like
+				if status == 'done' and done_reason == 'filled':
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
+
+					#update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
+					#output whether buy was a win, display % of buys that are wins
+					self.cursor = self.con.cursor()
+					self.cursor.execute("SELECT * FROM win_tracker;")
+					data = self.cursor.fetchone()
+					price_at_deposit = data[1]
+					buy_count = data[3]
+					win_count = data[4]
+					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
+					logger.warn('price_at_buy: %.2f' % filled_price)
+
+					if self.price < price_at_deposit:
+						win_count += 1
+						logger.warn("WIN: Bought at a lower price than at deposit time! :)")
+					
+					else:
+						logger.warn("LOSS: Bought at a higher price than at deposit time. :(")
+
+					buy_count += 1
+					win_percent = (win_count / buy_count) * 100
+					logger.warn("TESTING: Win percentage is %.2f%%" % win_percent)
+
+					query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
+					query_data = (filled_price, buy_count, win_count)
+					self.cursor.execute(query, query_data)
+					self.cursor.close()
+					self.con.commit()
+
 				elif status == 'done' and done_reason == 'canceled':
 					pending = False
 					logger.warn('Buy order was canceled by exchange.')
-					#what does a successful sell look like?
-					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
+					self.run()
 				else:	
 					logger.info('waiting')
 					time.sleep(2)
-					#if status is anything other than 'closed' or 'done', we want to 
-					#then wait like 2-3 seconds, check again?
+
 
 			# reset stoploss after executing buy
 			self.stoploss = None
@@ -353,9 +470,7 @@ class StopTrail():
 			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
 			self.coin_hopper = 0
 			logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
-			#logger.warn("Updated account balance: " + str(self.coin_hopper))
 
-			#also reset the account_balance value? or should I wait for next get_balance loop to start?
 			self.cursor.close()
 			self.con.commit()
 		
@@ -370,100 +485,10 @@ class StopTrail():
 			raise
 		except ccxt.NetworkError as e:
 			logger.error('Failed to execute sell order  | Network error | %s' % e)
-			#raise ### we should not raise the exception here, we should let the script continue, which will result in a loop of network errors until it succeeds.
+
 		except Exception as e:
 			logger.error('%s | %s' % (error_message, e))
 			raise
-
-	
-
-	def initialize_hopper(self):
-		if self.type == "sell":
-			self.cursor = self.con.cursor()
-			self.cursor.execute("SELECT * FROM hopper ;")
-			first_row = self.cursor.fetchone()
-			self.cursor.close()
-			hopper_amount = first_row[1]
-			if hopper_amount > 0:
-				logger.warn('Hopper already set at: %.4f' % hopper_amount)
-			else:
-				logger.info('No hopper previously set. Starting at 0.')
-			self.hopper = hopper_amount
-			return self.hopper
-
-
-	def update_hopper(self):
-		
-		if self.type == 'sell':
-			self.cursor = self.con.cursor()
-			self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
-			result = self.cursor.fetchone()
-			self.cursor.close()
-			remaining_rows = result[0]
-			#logger.info('Thresholds remaining: ' + str(remaining_rows))
-
-			if remaining_rows > 0:
-				self.cursor = self.con.cursor()
-				self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
-				first_row = self.cursor.fetchone()
-				self.cursor.close()
-				threshold = first_row[1]
-				exit_amount = first_row[2]
-				
-				if self.price >= threshold:
-					try:
-						# update our threshold table to indicate that a new threshold has been hit
-						row_id = str(first_row[0])
-						self.cursor = self.con.cursor()
-						self.cursor.execute("UPDATE thresholds SET threshold_hit = 'Y' WHERE id = ?", (row_id))
-						self.cursor.close()
-						self.con.commit()
-					except Exception as e:
-						logger.exception('Failed to update exit_strategy.db threshold table | %s' % e)
-						
-					try:	
-						# initialize a stoploss, if one is not already initialized
-						if self.stoploss_initialized == False:
-							self.initialize_stop()
-					except Exception as e:
-						logger.exception('Failed to initialize_stop() | %s' % e)
-
-					try:	
-						# write the new hopper value to the hopper table
-						logger.warn('Hit our threshold at ' + str(threshold) + '. Adding ' + str(exit_amount) + ' to hopper.')
-						self.hopper += exit_amount
-						self.cursor = self.con.cursor()
-						self.cursor.execute("REPLACE INTO hopper (id, amount) VALUES (?, ?)", (1, self.hopper))
-						logger.warn('New hopper total: %.4f' % self.hopper)
-						logger.warn('Thresholds remaining: %s' % (int(remaining_rows)-1))
-						# check to see if we have any remaining thesholds, if so, output the next threshold value
-						self.cursor.execute("SELECT Count(*) from thresholds WHERE threshold_hit = 'N';")
-						result = self.cursor.fetchone()
-						remaining_rows = result[0]
-						if remaining_rows > 0:
-							self.cursor.execute("SELECT * FROM thresholds WHERE threshold_hit = 'N';")
-							first_row = self.cursor.fetchone()
-							self.cursor.close()
-							next_threshold = first_row[1]
-							self.cursor.close()
-							self.con.commit()
-							logger.warn('Next threshold at: %.2f' % next_threshold)
-						else:
-							logger.warn('Final threshold hit.')
-							self.cursor.close()
-
-					except Exception as e:
-						logger.exception('Failed to update hopper | %s' % e)
-						raise #think about what we want to do when we can't update the hopper.. should we exit the script? 
-					
-				else:
-					logger.info('Price has not yet met the next threshold of ' + str(threshold))
-
-			else:
-				logger.info('No more values to add to hopper.')
-				threshold = None
-
-			return self.hopper, threshold
 
 
 	def print_status(self):
@@ -528,7 +553,13 @@ class StopTrail():
 			logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
 			logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
 			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
-			logger.warn('Market price at time of deposit: %.2f' % self.price)
+			
+			#update the price at deposit for the win tracker
+			logger.warn('DEPOSIT: Market price at time of deposit: %.2f' % self.price)
+			self.cursor = self.con.cursor()
+			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
+			self.cursor.close()
+			self.con.commit()
 
 		elif difference < 0: 
 			# do nothing with the coin hopper
@@ -537,7 +568,7 @@ class StopTrail():
 			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
 			self.cursor.close()
 			self.con.commit()
-			logger.warn("REMOVED: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+			logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
 		elif difference == 0:
 			logger.info('No new deposit.')
@@ -555,23 +586,6 @@ class StopTrail():
 
 		return self.balance, self.coin_hopper
 
-		# else:
-		# 	logger.info('Coinbase account balance is too low to satisfy minumum order size requirements. Waiting for additional deposit.')
-		
-		# return self.balance# self.coin_hopper
-
-		# # logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 
-		# self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-	
-		# if self.balance > 0: #if we have a balance, let's initialize a stoploss, else, continue
-		# 	try:	
-		# 		# initialize a stoploss, if one is not already initialized
-		# 		if self.stoploss_initialized == False:
-		# 			self.initialize_stop()
-		# 	except Exception as e:
-		# 			('Failed to initialize_stop() | %s' % e)
-
-		# return self.balance
 
 	def run(self):
 		self.running = True
