@@ -7,7 +7,7 @@ import pandas as pd
 import sqlite3 as sl
 from coinbasepro import CoinbasePro
 from crypto_bot_definitions import LOG_DIR
-from helper import get_logger, Config
+from helper import get_logger, send_sns, Config
 
 # To Do:
 # 1. DONE? - Instead of usin a static amount of funds, create a function to read from a dataframe, check against current price, and update a "holding pen/hopper" with more ETH as new thresholds are crossed (https://stackoverflow.com/questions/42285806/how-to-pop-rows-from-a-dataframe)
@@ -408,6 +408,8 @@ class StopTrail():
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
+					message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
+					send_sns(message)
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
 
 					# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
@@ -430,7 +432,7 @@ class StopTrail():
 
 					buy_count += 1
 					win_percent = (win_count / buy_count) * 100
-					logger.warn("TESTING: Win percentage is %.2f%%" % win_percent)
+					logger.warn("TESTING: Win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
 
 					query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
 					query_data = (filled_price, buy_count, win_count)
@@ -545,7 +547,7 @@ class StopTrail():
 			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
 			
 			#update the price at deposit for the win tracker
-			logger.warn('DEPOSIT: Market price at time of deposit: %.2f' % self.price)
+			logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
 			self.cursor = self.con.cursor()
 			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
 			self.cursor.close()
