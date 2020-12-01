@@ -1,23 +1,12 @@
 from configparser import ConfigParser
 import smtplib
 import logging
+import boto3
 from logging import config
 from crypto_bot_definitions import CONF_DIR
 
 __LOGGER_CONF_FILE = CONF_DIR + "/logger.ini"
-
-def get_logger(file_name):
-    """
-    Creates a logger object which can utilized by all modules.
-    IMP Setting: disable_existing_loggers=False
-    :param file_name:
-    :return:
-    """
-    logging.config.fileConfig(__LOGGER_CONF_FILE, disable_existing_loggers=False)
-    name = file_name.split("/")[-1].split(".")[0]
-    logger = logging.getLogger(name)
-    return logger
-
+__SETTINGS_CONF_FILE = CONF_DIR + "/settings.ini"
 
 class Config(ConfigParser):
 
@@ -42,4 +31,34 @@ class Config(ConfigParser):
         :return: 'str' value of the key passed as an argument.
         """
         return cls.get(Config(), section, key)
+
+
+def get_logger(file_name):
+    """
+    Creates a logger object which can utilized by all modules.
+    IMP Setting: disable_existing_loggers=False
+    :param file_name:
+    :return:
+    """
+    logging.config.fileConfig(__LOGGER_CONF_FILE, disable_existing_loggers=False)
+    name = file_name.split("/")[-1].split(".")[0]
+    logger = logging.getLogger(name)
+    return logger
+
+
+def send_sns(message):
+    sns = boto3.client(
+        "sns",
+        aws_access_key_id = Config.get_value('aws','aws_access_key_id'),
+        aws_secret_access_key = Config.get_value('aws','aws_secret_access_key'),
+        region_name = Config.get_value('aws','region_name')
+    )
+
+    sns.publish(
+        PhoneNumber = Config.get_value('sns','phone_number'),
+        Message = message
+    )
+
+
+
 
