@@ -390,66 +390,61 @@ class StopTrail():
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
-			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
+			#buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
 
 			#logger.info('sell order json: %s' % buy_order)
-			id = buy_order['info']['id']
-			pending = True
-			fetch_order = self.coinbasepro.get_order(id)
-			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
-			while pending:
-				# logger.info(fetch_order)
-				# logger.info('id: %s' % id)
-				# logger.info('size: %s' % size)
-				# logger.info('price: %s' % price)
-				# logger.info('status: %s' % status)
-				# logger.info('done_reason: %s' % done_reason)
-				if status == 'done' and done_reason == 'filled':
-					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
-					pending = False
-					logger.warn("ORDER: Buy order executed and filled successfully.")
-					message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
-					send_sns(message)
-					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
+			# id = buy_order['info']['id']
+			# pending = True
+			# fetch_order = self.coinbasepro.get_order(id)
+			# size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+			# # while pending:
+			# 	if status == 'done' and done_reason == 'filled':
+			# 		filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
+			# 		pending = False
+			# 		logger.warn("ORDER: Buy order executed and filled successfully.")
+			# 		message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
+			# 		send_sns(message)
+			# 		logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
 
-					# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
-					# output whether buy was a win, display % of buys that are wins
-					self.cursor = self.con.cursor()
-					self.cursor.execute("SELECT * FROM win_tracker;")
-					data = self.cursor.fetchone()
-					price_at_deposit = data[1]
-					buy_count = data[3]
-					win_count = data[4]
-					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
-					logger.warn('price_at_buy: %.2f' % filled_price)
+			# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
+			# output whether buy was a win, display % of buys that are wins
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT * FROM win_tracker;")
+			data = self.cursor.fetchone()
+			price_at_deposit = data[1]
+			buy_count = data[3]
+			win_count = data[4]
+			logger.warn('price_at_deposit: %.2f' % price_at_deposit)
+			logger.warn('price_at_buy: %.2f' % self.price)
 
-					if filled_price < price_at_deposit:
-						win_count += 1
-						logger.warn("WIN: Bought at a lower price than at deposit time! :)")
-					
-					else:
-						logger.warn("LOSS: Bought at a higher price than at deposit time. :(")
+			if self.price < price_at_deposit:
+				win_count += 1
+				logger.warn("WIN: Bought at a lower price than at deposit time! :)")
+			
+			else:
+				logger.warn("LOSS: Bought at a higher price than at deposit time. :(")
 
-					buy_count += 1
-					win_percent = (win_count / buy_count) * 100
-					logger.warn("TESTING: Win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
+			buy_count += 1
+			win_percent = (win_count / buy_count) * 100
+			logger.warn("TESTING: Win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
 
-					query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
-					query_data = (filled_price, buy_count, win_count)
-					self.cursor.execute(query, query_data)
-					self.cursor.close()
-					self.con.commit()
+			query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
+			query_data = (self.price, buy_count, win_count)
+			self.cursor.execute(query, query_data)
+			self.cursor.close()
+			self.con.commit()
 
-				elif status == 'done' and done_reason == 'canceled':
-					pending = False
-					logger.warn('Buy order was canceled by exchange.')
-					self.run()
-				else:	
-					logger.info('waiting')
-					time.sleep(2)
+				# elif status == 'done' and done_reason == 'canceled':
+				# 	pending = False
+				# 	logger.warn('Buy order was canceled by exchange.')
+				# 	self.run()
+				# else:	
+				# 	logger.info('waiting')
+				# 	time.sleep(2)
 
 
 			# reset stoploss after executing buy
+			error_message = 'Failed to update exit_strategy.db after executing sell order'
 			self.stoploss = None
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
@@ -457,14 +452,20 @@ class StopTrail():
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
 
 			# reset coin_hopper after executing buy
-			error_message = 'Failed to update exit_strategy.db after executing sell order'
-			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
-			self.coin_hopper = 0
-			logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
+			# error_message = 'Failed to update exit_strategy.db after executing sell order'
+			# self.cursor = self.con.cursor()
+			# self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
+			# self.coin_hopper = 0
+			# logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
+			time.sleep(10)
+			self.get_price()
 
+			logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
+			self.cursor = self.con.cursor()
+			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
 			self.cursor.close()
 			self.con.commit()
+
 		
 		except ccxt.AuthenticationError as e:
 			logger.error('Failed to execute sell order | Authentication error | %s' % str(e))
@@ -556,10 +557,10 @@ class StopTrail():
 		elif difference < 0: 
 			# do nothing with the coin hopper
 			# update the last known account balance to reflect balance in coinbase
-			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
-			self.cursor.close()
-			self.con.commit()
+			# self.cursor = self.con.cursor()
+			# self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+			# self.cursor.close()
+			# self.con.commit()
 			logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
 		#elif difference == 0:
