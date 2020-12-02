@@ -1,0 +1,10 @@
+[Unit]
+Description=eric-sell-btc systemd service.
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/bin/eric-sell-btc.sh
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target
