@@ -1,0 +1,9 @@
+version: '2.1'
+services:
+  eric-buy-btc:
+    image: 'crypto-bot:1.0.0'
+    container_name: eric-buy-btc
+    hostname: eric-buy-btc
+    network_mode: 'host'
+    volumes:
+     - /crypto/logs/eric-buy-btc:/crypto/log:z
