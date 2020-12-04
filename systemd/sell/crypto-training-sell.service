@@ -1,5 +1,5 @@
 [Unit]
-Description=crypto-trailing-sell systemd service.
+Description=eric-sell-btc systemd service.
 
 [Service]
 Type=simple
