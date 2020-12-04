@@ -329,6 +329,38 @@ class StopTrail():
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
+
+					# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
+					# output whether buy was a win, display % of buys that are wins
+					self.cursor = self.con.cursor()
+					self.cursor.execute("SELECT * FROM win_tracker;")
+					data = self.cursor.fetchone()
+					price_at_deposit = data[1]
+					buy_count = data[3]
+					win_count = data[4]
+					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
+					logger.warn('price_at_buy: %.2f' % filled_price)
+
+					diff = filled_price - price_at_deposit
+					percent_diff = 100 * (abs(diff) / price_at_deposit)
+
+					if self.price < price_at_deposit:
+						win_count += 1
+						logger.warn("RESULT (WIN): bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
+					
+					else:
+						logger.warn("RESULT (LOSS): bought %.2f higher than at deposit time. -%.2f%%" % (diff, percent_diff))
+
+					buy_count += 1
+					win_percent = (win_count / buy_count) * 100
+					logger.warn("RESULT: Running win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
+
+					query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
+					query_data = (filled_price, buy_count, win_count)
+					self.cursor.execute(query, query_data)
+					self.cursor.close()
+					self.con.commit()
+
 				elif status == 'done' and done_reason == 'canceled':
 					pending = False
 					logger.warn('Buy order was canceled by exchange.')
@@ -466,6 +498,41 @@ class StopTrail():
 			return self.hopper, threshold
 
 
+def dca_price_logic():
+
+    self.cursor = self.con.cursor()
+    self.cursor.execute("SELECT * FROM win_tracker;")
+    data = self.cursor.fetchone()
+	self.cursor.close()
+
+    price_at_deposit = data[1]
+    upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
+    lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
+
+    if self.price > upper_threshold:
+		if self.coin_hopper > 50: #price has risen out of our range - if we have the required minimum balance, let's execute a buy order
+			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' & (self.stopsize, upper_threshold))
+			self.stoploss = upper_threshold
+			self.execute_buy()
+		else:
+			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
+    elif self.price <= lower_threshold:
+		if self.coin_hopper > 50: # price hit the lower bound of our range - if we have the required minimum balance, let's initialize a stoploss, else, continue
+			try:	
+				# initialize a stoploss, if one is not already initialized
+				if self.stoploss_initialized == False:
+					self.initialize_stop()
+			except Exception as e:
+					('Failed to initialize_stop() | %s' % e)
+		else:
+			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
+    else:
+        logger.info('Price is still within our starting range of +/- %.2f%% from deposit price. Taking no action.' & self.stopsize)
+
+
+
 	def print_status(self):
 		logger.info("---------------------")
 		logger.info("Trail type: %s" % self.type)
@@ -496,7 +563,6 @@ class StopTrail():
 			return self.price
 		except Exception as e:
 			logging.error(e)
-			# if there is a network error, this will sleep for 5 seconds
 
 
 	def get_balance(self):
@@ -539,19 +605,21 @@ class StopTrail():
 			self.con.commit()
 			logger.warn("REMOVED: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
-		elif difference == 0:
-			logger.info('No new deposit.')
+		self.dca_price_logic()
 
-		if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
-			try:	
-				# initialize a stoploss, if one is not already initialized
-				if self.stoploss_initialized == False:
-					self.initialize_stop()
-			except Exception as e:
-					('Failed to initialize_stop() | %s' % e)
+		#elif difference == 0:
+			#logger.info('No new deposit.')
 
-		else:
-			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+		# if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
+		# 	try:	
+		# 		# initialize a stoploss, if one is not already initialized
+		# 		if self.stoploss_initialized == False:
+		# 			self.initialize_stop()
+		# 	except Exception as e:
+		# 			('Failed to initialize_stop() | %s' % e)
+
+		# else:
+		# 	logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
 
 		return self.balance, self.coin_hopper
 
@@ -583,8 +651,8 @@ class StopTrail():
 					self.update_hopper()
 			elif self.type == "buy":
 				if self.get_price():
-						self.get_balance()
-						self.print_status()
-						self.update_stop()
-						#self.update_hopper()
+					self.get_balance()
+					self.print_status()
+					self.update_stop()
+					#self.update_hopper()
 			time.sleep(self.interval)
