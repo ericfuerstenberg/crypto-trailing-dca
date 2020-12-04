@@ -423,16 +423,19 @@ class StopTrail():
 					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
 					logger.warn('price_at_buy: %.2f' % filled_price)
 
-					if filled_price < price_at_deposit:
+					diff = self.price - price_at_deposit
+					percent_diff = 100 * (abs(diff) / price_at_deposit)
+
+					if self.price < price_at_deposit:
 						win_count += 1
-						logger.warn("WIN: Bought at a lower price than at deposit time! :)")
+						logger.warn("RESULT (WIN): bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
 					
 					else:
-						logger.warn("LOSS: Bought at a higher price than at deposit time. :(")
+						logger.warn("RESULT (LOSS): bought %.2f higher than at deposit time. -%.2f%%" % (diff, percent_diff))
 
 					buy_count += 1
 					win_percent = (win_count / buy_count) * 100
-					logger.warn("TESTING: Win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
+					logger.warn("RESULT: Running win percentage is %i / %i = %.2f%%" % (win_count, buy_count, win_percent))
 
 					query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
 					query_data = (filled_price, buy_count, win_count)
