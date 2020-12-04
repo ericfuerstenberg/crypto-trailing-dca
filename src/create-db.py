@@ -36,6 +36,16 @@ with con:
         );
     """)
 
+    con.execute("""
+        CREATE TABLE win_tracker (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            price_at_deposit INTEGER,
+            price_at_buy INTEGER,
+            buy_count INTEGER,
+            win_count INTEGER
+        );
+    """)  
+
 thresholds = 'INSERT INTO thresholds (id, price, amount, threshold_hit, sold_at) values (?, ?, ?, ?, ?)'
 data1 = [
     (1, 14200, 0.05, 'N', None),
@@ -59,8 +69,14 @@ data4 = [
     (1, None)
 ]
 
+win_tracker = 'INSERT INTO win_tracker (id, price_at_deposit, price_at_buy, buy_count, win_count) values (?, ?, ?, ?, ?)'
+data5= [
+    (1, None, None, 0, 0)
+]
+
 with con:
     con.executemany(thresholds, data1) 
     con.executemany(hopper, data2)
     con.executemany(available_funds, data3)
     con.executemany(stoploss, data4)
+    con.executemany(win_tracker, data5)
