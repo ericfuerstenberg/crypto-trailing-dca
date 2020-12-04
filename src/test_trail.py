@@ -47,12 +47,13 @@ class StopTrail():
 	def __init__(self, market, type, stopsize, interval):
 
 		logger.warning('Initializing bot...')
+		logger.warning('RUNNING IN TEST MODE')
 
 		# establish a connection with exchange
 		self.coinbasepro = CoinbasePro(
-			api_key=Config.get_value('api','api_key'),
-			api_secret=Config.get_value('api','api_secret'),
-			password=Config.get_value('api','password')
+			api_key=Config.get_value('live_api','api_key'),
+			api_secret=Config.get_value('live_api','api_secret'),
+			password=Config.get_value('live_api','password')
 		)
 		
 		# set our variables
@@ -417,12 +418,17 @@ class StopTrail():
 			logger.warn('price_at_deposit: %.2f' % price_at_deposit)
 			logger.warn('price_at_buy: %.2f' % self.price)
 
+			diff = self.price - price_at_deposit
+			percent_diff = 100 * (abs(diff) / price_at_deposit)
+			print('diff: %.2f' % diff)
+			print('percent_diff: %.2f' % percent_diff)
+
 			if self.price < price_at_deposit:
 				win_count += 1
-				logger.warn("WIN: Bought at a lower price than at deposit time! :)")
+				logger.warn("RESULT WIN: Bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
 			
 			else:
-				logger.warn("LOSS: Bought at a higher price than at deposit time. :(")
+				logger.warn("RESULT LOSS: Bought %.2f higher than at deposit time. -%.2f%%" % (diff, percent_diff))
 
 			buy_count += 1
 			win_percent = (win_count / buy_count) * 100
@@ -519,7 +525,8 @@ class StopTrail():
 
 	def get_balance(self):
 		# get coinbase balance
-		self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+		#self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+		self.balance = 150
 
 		# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
 		# get last_known_balance from the available_funds table
