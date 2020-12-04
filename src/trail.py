@@ -486,38 +486,38 @@ class StopTrail():
 			raise
 
 
-def dca_price_logic():
+	def dca_price_logic():
 
-    self.cursor = self.con.cursor()
-    self.cursor.execute("SELECT * FROM win_tracker;")
-    data = self.cursor.fetchone()
-	self.cursor.close()
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM win_tracker;")
+		data = self.cursor.fetchone()
+		self.cursor.close()
 
-    price_at_deposit = data[1]
-    upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
-    lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
+		price_at_deposit = data[1]
+		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
+		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
 
-    if self.price > upper_threshold:
-		if self.coin_hopper > 50: #price has risen out of our range - if we have the required minimum balance, let's execute a buy order
-			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' & (self.stopsize, upper_threshold))
-			self.stoploss = upper_threshold
-			self.execute_buy()
+		if self.price > upper_threshold:
+			if self.coin_hopper > 50: #price has risen out of our range - if we have the required minimum balance, let's execute a buy order
+				logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' & (self.stopsize, upper_threshold))
+				self.stoploss = upper_threshold
+				self.execute_buy()
+			else:
+				logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
+		elif self.price <= lower_threshold:
+			if self.coin_hopper > 50: # price hit the lower bound of our range - if we have the required minimum balance, let's initialize a stoploss, else, continue
+				try:	
+					# initialize a stoploss, if one is not already initialized
+					if self.stoploss_initialized == False:
+						self.initialize_stop()
+				except Exception as e:
+						('Failed to initialize_stop() | %s' % e)
+			else:
+				logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
 		else:
-			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
-
-    elif self.price <= lower_threshold:
-		if self.coin_hopper > 50: # price hit the lower bound of our range - if we have the required minimum balance, let's initialize a stoploss, else, continue
-			try:	
-				# initialize a stoploss, if one is not already initialized
-				if self.stoploss_initialized == False:
-					self.initialize_stop()
-			except Exception as e:
-					('Failed to initialize_stop() | %s' % e)
-		else:
-			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
-
-    else:
-        logger.info('Price is still within our starting range of +/- %.2f%% from deposit price. Taking no action.' & self.stopsize)
+			logger.info('Price is still within our starting range of +/- %.2f%% from deposit price. Taking no action.' & self.stopsize)
 
 
 
