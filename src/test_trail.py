@@ -51,9 +51,9 @@ class StopTrail():
 
 		# establish a connection with exchange
 		self.coinbasepro = CoinbasePro(
-			api_key=Config.get_value('api','api_key'),
-			api_secret=Config.get_value('api','api_secret'),
-			password=Config.get_value('api','password')
+			api_key=Config.get_value('live_api','api_key'),
+			api_secret=Config.get_value('live_api','api_secret'),
+			password=Config.get_value('live_api','password')
 		)
 		
 		# set our variables
@@ -198,7 +198,7 @@ class StopTrail():
 
 			lower_threshold = self.price_at_deposit - (self.price_at_deposit * self.stopsize)
 			self.stoploss = self.price_at_deposit
-			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % (self.stopsize, lower_threshold))
+			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % ((self.stopsize*100), lower_threshold))
 
 			# write the stoploss value to the stoploss table
 			self.cursor = self.con.cursor()
@@ -372,7 +372,7 @@ class StopTrail():
 			raise
 		except ccxt.NetworkError as e:
 			logger.exception('Failed to execute sell order  | NETWORK ERROR | %s' % e)
-			#raise ### we should not raise the exception here, we should let the script continue, which will result in a loop of network errors until it succeeds.
+
 		except Exception as e:
 			logger.exception('%s | %s' % (error_message, e))
 			raise
@@ -415,8 +415,6 @@ class StopTrail():
 
 			diff = self.price - price_at_deposit
 			percent_diff = 100 * (abs(diff) / price_at_deposit)
-			print('diff: %.2f' % diff)
-			print('percent_diff: %.2f' % percent_diff)
 
 			if self.price < price_at_deposit:
 				win_count += 1
@@ -485,7 +483,7 @@ class StopTrail():
 			raise
 
 
-	def dca_price_logic(self):
+	def dca_buy_logic(self):
 
 		self.cursor = self.con.cursor()
 		self.cursor.execute("SELECT * FROM win_tracker;")
@@ -496,18 +494,13 @@ class StopTrail():
 		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
 		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
 
-		logger.info('checking prices')
-		logger.info('self.price: %.2f' % self.price)
-		logger.info('upper_threshold: %.2f' % upper_threshold)
-		logger.info('lower_threshold: %.2f' % lower_threshold)
-
 		if self.price > upper_threshold:
-			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % (self.stopsize, upper_threshold))
+			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % ((self.stopsize*100), upper_threshold))
 			self.stoploss = upper_threshold
 			self.execute_buy()
 
 		elif self.price <= lower_threshold:
-			logger.info('price is lower than threshold (verify)')
+			#logger.info('price is lower than threshold (verify)')
 			try:	
 				# initialize a stoploss, if one is not already initialized 
 				# stoploss needs to be initialized at the deposit price
@@ -520,7 +513,6 @@ class StopTrail():
 			if self.stoploss_initialized == False:
 				logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
 			
-
 
 
 	def print_status(self):
@@ -573,6 +565,8 @@ class StopTrail():
 		# take the difference between the coinbase balance and the last_known_account_balance
 		difference = self.balance - last_known_account_balance
 
+		self.print_status()
+
 		if difference > 0:
 			#take half of the newly deposited USD and allocate to the coin_hopper
 			half_of_deposit = difference * 0.5
@@ -610,7 +604,7 @@ class StopTrail():
 			#logger.info('No new deposit.')
 
 		if self.coin_hopper > 50:
-			self.dca_price_logic()
+			self.dca_buy_logic()
 
 		else:
 			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
@@ -629,7 +623,5 @@ class StopTrail():
 			elif self.type == "buy":
 				if self.get_price():
 						self.get_balance()
-						self.print_status()
 						self.update_stop()
-						#self.update_hopper()
 			time.sleep(self.interval)

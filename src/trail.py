@@ -197,7 +197,7 @@ class StopTrail():
 
 			lower_threshold = self.price_at_deposit - (self.price_at_deposit * self.stopsize)
 			self.stoploss = self.price_at_deposit
-			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % (self.stopsize, lower_threshold))
+			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % ((self.stopsize*100), lower_threshold))
 
 			# write the stoploss value to the stoploss table
 			self.cursor = self.con.cursor()
@@ -306,8 +306,6 @@ class StopTrail():
 			else: 
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
-		#else:
-			#logger.info('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
 
 		# execute sell order, verify that sell posts and completes, then reset hopper, stoploss, and sold_at values
 		try:
@@ -320,14 +318,9 @@ class StopTrail():
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+
 			while pending:
-				# logger.info(fetch_order)
-				# logger.info('id: %s' % id)
-				# logger.info('size: %s' % size)
-				# logger.info('price: %s' % price)
-				# logger.info('status: %s' % status)
-				# logger.info('done_reason: %s' % done_reason)
-				if status == 'done' and done_reason == 'filled': #verify what a successful order looks like
+				if status == 'done' and done_reason == 'filled': 
 					filled, sell_value, fee = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost']
 					pending = False
 					logger.warn("Sell order executed and filled successfully.")
@@ -337,9 +330,7 @@ class StopTrail():
 					logger.warn('Sell order was canceled by exchange.')
 					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
 				else:	
-					time.sleep(2)
-					#if status is anything other than 'closed' or 'done', we want to 
-					#then wait like 2-3 seconds, check again?
+					time.sleep(2) #if status is anything other than 'closed' or 'done', we want to sleep the script and recheck
 
 			# reset hopper after executing sell
 			error_message = 'Failed to update exit_strategy.db after executing sell order'
@@ -385,20 +376,14 @@ class StopTrail():
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
+			
 			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
-
-			#logger.info('sell order json: %s' % buy_order)
 			id = buy_order['info']['id']
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+
 			while pending:
-				# logger.info(fetch_order)
-				# logger.info('id: %s' % id)
-				# logger.info('size: %s' % size)
-				# logger.info('price: %s' % price)
-				# logger.info('status: %s' % status)
-				# logger.info('done_reason: %s' % done_reason)
 				if status == 'done' and done_reason == 'filled':
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
@@ -481,7 +466,7 @@ class StopTrail():
 			raise
 
 
-	def dca_price_logic(self):
+	def dca_buy_logic(self):
 
 		self.cursor = self.con.cursor()
 		self.cursor.execute("SELECT * FROM win_tracker;")
@@ -492,11 +477,12 @@ class StopTrail():
 		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
 		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
 
+		self.print_status()
+
 		if self.price > upper_threshold:
-			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % (self.stopsize, upper_threshold))
+			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % ((self.stopsize*100), upper_threshold))
 			self.stoploss = upper_threshold
 			self.execute_buy()
-
 
 		elif self.price <= lower_threshold:
 			try:	
@@ -596,27 +582,13 @@ class StopTrail():
 				logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
 			if self.coin_hopper > 50:
-				self.dca_price_logic()
+				self.dca_buy_logic()
 			
 			else:
 				logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
 
 		except Exception as e:
 			logger.error(e)
-
-		#elif difference == 0:
-			#logger.info('No new deposit.')
-
-		# if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
-		# 	try:	
-		# 		# initialize a stoploss, if one is not already initialized
-		# 		if self.stoploss_initialized == False:
-		# 			self.initialize_stop()
-		# 	except Exception as e:
-		# 			('Failed to initialize_stop() | %s' % e)
-
-		# else:
-		# 	logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
 
 		return self.balance, self.coin_hopper
 
@@ -632,7 +604,6 @@ class StopTrail():
 			elif self.type == "buy":
 				if self.get_price():
 					self.get_balance()
-					self.print_status()
+					#self.print_status()
 					self.update_stop()
-					#self.update_hopper()
 			time.sleep(self.interval)
