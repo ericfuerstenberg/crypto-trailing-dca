@@ -418,10 +418,10 @@ class StopTrail():
 					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
 					logger.warn('price_at_buy: %.2f' % filled_price)
 
-					diff = filled_price - price_at_deposit
+					diff = price_at_deposit - filled_price
 					percent_diff = 100 * (abs(diff) / price_at_deposit)
 
-					if self.price < price_at_deposit:
+					if filled_price < price_at_deposit:
 						win_count += 1
 						logger.warn("RESULT (WIN): bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
 					
@@ -508,8 +508,9 @@ class StopTrail():
 					('Failed to initialize_stop() | %s' % e)
 
 		else:
-			logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
-
+			if self.stoploss_initialized == False:
+				logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
+			
 
 
 	def print_status(self):
