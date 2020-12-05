@@ -51,9 +51,9 @@ class StopTrail():
 
 		# establish a connection with exchange
 		self.coinbasepro = CoinbasePro(
-			api_key=Config.get_value('live_api','api_key'),
-			api_secret=Config.get_value('live_api','api_secret'),
-			password=Config.get_value('live_api','password')
+			api_key=Config.get_value('api','api_key'),
+			api_secret=Config.get_value('api','api_secret'),
+			password=Config.get_value('api','password')
 		)
 		
 		# set our variables
@@ -195,24 +195,19 @@ class StopTrail():
 		self.tracked_price = self.price
 		
 		if self.type == "buy":
-			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
-			if self.coin_hopper > 1:
-				self.stoploss = (self.price + (self.price * self.stopsize))
-				self.cursor = self.con.cursor()
-				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
-				#logger.warn('Starting USD balance: %.2f' % self.balance)
-				logger.warn('Stop loss initialized at: %.2f' % self.stoploss)
-				self.cursor.close()
-				self.con.commit()
-					
-				return self.stoploss, self.stoploss_initialized, self.tracked_price
-			
-			else: 
-				self.stoploss = None
-				self.stoploss_initialized = False
-				logger.warn('No USD allocated to purchase %s. Waiting for deposit.' % self.market.split("/")[0])
 
-				return self.stoploss, self.stoploss_initialized, self.tracked_price
+			lower_threshold = self.price_at_deposit - (self.price_at_deposit * self.stopsize)
+			self.stoploss = self.price_at_deposit
+			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % (self.stopsize, lower_threshold))
+
+			# write the stoploss value to the stoploss table
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+			logger.warn('Stop loss initialized at deposit price: %.2f' % self.stoploss)
+			self.cursor.close()
+			self.con.commit()
+				
+			return self.stoploss, self.stoploss_initialized, self.tracked_price
 
 
 		elif self.type == "sell": 
@@ -425,10 +420,10 @@ class StopTrail():
 
 			if self.price < price_at_deposit:
 				win_count += 1
-				logger.warn("RESULT WIN: Bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
-			
+				logger.warn("RESULT (WIN): bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
+					
 			else:
-				logger.warn("RESULT LOSS: Bought %.2f higher than at deposit time. -%.2f%%" % (diff, percent_diff))
+				logger.warn("RESULT (LOSS): bought %.2f higher than at deposit time. -%.2f%%" % (diff, percent_diff))
 
 			buy_count += 1
 			win_percent = (win_count / buy_count) * 100
@@ -488,6 +483,44 @@ class StopTrail():
 		except Exception as e:
 			logger.error('%s | %s' % (error_message, e))
 			raise
+
+
+	def dca_price_logic(self):
+
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM win_tracker;")
+		data = self.cursor.fetchone()
+		self.cursor.close()
+
+		price_at_deposit = data[1]
+		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
+		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
+
+		logger.info('checking prices')
+		logger.info('self.price: %.2f' % self.price)
+		logger.info('upper_threshold: %.2f' % upper_threshold)
+		logger.info('lower_threshold: %.2f' % lower_threshold)
+
+		if self.price > upper_threshold:
+			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % (self.stopsize, upper_threshold))
+			self.stoploss = upper_threshold
+			self.execute_buy()
+
+		elif self.price <= lower_threshold:
+			logger.info('price is lower than threshold (verify)')
+			try:	
+				# initialize a stoploss, if one is not already initialized 
+				# stoploss needs to be initialized at the deposit price
+				if self.stoploss_initialized == False:
+					self.initialize_stop()
+			except Exception as e:
+					('Failed to initialize_stop() | %s' % e)
+
+		else:
+			if self.stoploss_initialized == False:
+				logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
+			
+
 
 
 	def print_status(self):
@@ -557,9 +590,12 @@ class StopTrail():
 			#update the price at deposit for the win tracker
 			logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
 			self.cursor = self.con.cursor()
+			self.price_at_deposit = self.price
 			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
 			self.cursor.close()
 			self.con.commit()
+
+			return self.price_at_deposit
 
 		elif difference < 0: 
 			# do nothing with the coin hopper
@@ -573,13 +609,8 @@ class StopTrail():
 		#elif difference == 0:
 			#logger.info('No new deposit.')
 
-		if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
-			try:	
-				# initialize a stoploss, if one is not already initialized
-				if self.stoploss_initialized == False:
-					self.initialize_stop()
-			except Exception as e:
-					('Failed to initialize_stop() | %s' % e)
+		if self.coin_hopper > 50:
+			self.dca_price_logic()
 
 		else:
 			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
