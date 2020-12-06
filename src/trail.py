@@ -194,24 +194,19 @@ class StopTrail():
 		self.tracked_price = self.price
 		
 		if self.type == "buy":
-			# If there is USD available in our account, initialize a stoploss. Else, wait for us to deposit some USD first!
-			if self.coin_hopper > 1:
-				self.stoploss = (self.price + (self.price * self.stopsize))
-				self.cursor = self.con.cursor()
-				self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
-				#logger.warn('Starting USD balance: %.2f' % self.balance)
-				logger.warn('Stop loss initialized at: %.2f' % self.stoploss)
-				self.cursor.close()
-				self.con.commit()
-					
-				return self.stoploss, self.stoploss_initialized, self.tracked_price
-			
-			else: 
-				self.stoploss = None
-				self.stoploss_initialized = False
-				logger.warn('No USD allocated to purchase %s. Waiting for deposit.' % self.market.split("/")[0])
 
-				return self.stoploss, self.stoploss_initialized, self.tracked_price
+			lower_threshold = self.price_at_deposit - (self.price_at_deposit * self.stopsize)
+			self.stoploss = self.price_at_deposit
+			logger.warn('Price has dropped at least %.2f%% from deposit price and hit our lower threshold of %.2f' % ((self.stopsize*100), lower_threshold))
+
+			# write the stoploss value to the stoploss table
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+			logger.warn('Stop loss initialized at deposit price: %.2f' % self.stoploss)
+			self.cursor.close()
+			self.con.commit()
+				
+			return self.stoploss, self.stoploss_initialized, self.tracked_price
 
 
 		elif self.type == "sell": 
@@ -311,8 +306,6 @@ class StopTrail():
 			else: 
 				logger.info('THIS IS A SAFE SELL, NO KILLSWITCH TRIGGERED')
 
-		#else:
-			#logger.info('No kill switch functionality needed - we havent sold anything yet') #We should think about whether we want a kill switch on our first threshold?
 
 		# execute sell order, verify that sell posts and completes, then reset hopper, stoploss, and sold_at values
 		try:
@@ -325,14 +318,9 @@ class StopTrail():
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+
 			while pending:
-				# logger.info(fetch_order)
-				# logger.info('id: %s' % id)
-				# logger.info('size: %s' % size)
-				# logger.info('price: %s' % price)
-				# logger.info('status: %s' % status)
-				# logger.info('done_reason: %s' % done_reason)
-				if status == 'done' and done_reason == 'filled': #verify what a successful order looks like
+				if status == 'done' and done_reason == 'filled': 
 					filled, sell_value, fee = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost']
 					pending = False
 					logger.warn("Sell order executed and filled successfully.")
@@ -342,9 +330,7 @@ class StopTrail():
 					logger.warn('Sell order was canceled by exchange.')
 					self.run() #if order was canceled, we want to exit this current function and restart our check_price loop to try again. 
 				else:	
-					time.sleep(2)
-					#if status is anything other than 'closed' or 'done', we want to 
-					#then wait like 2-3 seconds, check again?
+					time.sleep(2) #if status is anything other than 'closed' or 'done', we want to sleep the script and recheck
 
 			# reset hopper after executing sell
 			error_message = 'Failed to update exit_strategy.db after executing sell order'
@@ -390,20 +376,14 @@ class StopTrail():
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
+			
 			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
-
-			#logger.info('sell order json: %s' % buy_order)
 			id = buy_order['info']['id']
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+
 			while pending:
-				# logger.info(fetch_order)
-				# logger.info('id: %s' % id)
-				# logger.info('size: %s' % size)
-				# logger.info('price: %s' % price)
-				# logger.info('status: %s' % status)
-				# logger.info('done_reason: %s' % done_reason)
 				if status == 'done' and done_reason == 'filled':
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
@@ -423,10 +403,10 @@ class StopTrail():
 					logger.warn('price_at_deposit: %.2f' % price_at_deposit)
 					logger.warn('price_at_buy: %.2f' % filled_price)
 
-					diff = self.price - price_at_deposit
+					diff = price_at_deposit - filled_price
 					percent_diff = 100 * (abs(diff) / price_at_deposit)
 
-					if self.price < price_at_deposit:
+					if filled_price < price_at_deposit:
 						win_count += 1
 						logger.warn("RESULT (WIN): bought %.2f lower than at deposit time! +%.2f%%" % (diff, percent_diff))
 					
@@ -486,6 +466,39 @@ class StopTrail():
 			raise
 
 
+	def dca_buy_logic(self):
+
+		self.cursor = self.con.cursor()
+		self.cursor.execute("SELECT * FROM win_tracker;")
+		data = self.cursor.fetchone()
+		self.cursor.close()
+
+		price_at_deposit = data[1]
+		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
+		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
+
+		self.print_status()
+
+		if self.price > upper_threshold:
+			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % ((self.stopsize*100), upper_threshold))
+			self.stoploss = upper_threshold
+			self.execute_buy()
+
+		elif self.price <= lower_threshold:
+			try:	
+				# initialize a stoploss, if one is not already initialized 
+				# stoploss needs to be initialized at the deposit price
+				if self.stoploss_initialized == False:
+					self.initialize_stop()
+			except Exception as e:
+					('Failed to initialize_stop() | %s' % e)
+
+		else:
+			if self.stoploss_initialized == False:
+				logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
+			
+
+
 	def print_status(self):
 		logger.info("---------------------")
 		logger.info("Trail type: %s" % self.type)
@@ -516,68 +529,66 @@ class StopTrail():
 			return self.price
 		except Exception as e:
 			logging.error(e)
-			# if there is a network error, this will sleep for 5 seconds
 
 
 	def get_balance(self):
 		# get coinbase balance
-		self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+		try:
+			self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
 
-		# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
-		# get last_known_balance from the available_funds table
-		self.cursor = self.con.cursor()
-		self.cursor.execute("SELECT * FROM available_funds;")
-		first_row = self.cursor.fetchone()
-		self.cursor.close()
-		last_known_account_balance = first_row[1]
-		self.coin_hopper = first_row[2]
-
-		# take the difference between the coinbase balance and the last_known_account_balance
-		difference = self.balance - last_known_account_balance
-
-		if difference > 0:
-			#take half of the newly deposited USD and allocate to the coin_hopper
-			half_of_deposit = difference * 0.5
-			self.coin_hopper += half_of_deposit
-
-			# replace the last known account balance with the balance from coinbase
+			# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
+			# get last_known_balance from the available_funds table
 			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+			self.cursor.execute("SELECT * FROM available_funds;")
+			first_row = self.cursor.fetchone()
 			self.cursor.close()
-			self.con.commit()
-			logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
-			logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
-			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+			last_known_account_balance = first_row[1]
+			self.coin_hopper = first_row[2]
+
+			# take the difference between the coinbase balance and the last_known_account_balance
+			difference = self.balance - last_known_account_balance
+
+			if difference > 0:
+				#take half of the newly deposited USD and allocate to the coin_hopper
+				half_of_deposit = difference * 0.5
+				self.coin_hopper += half_of_deposit
+
+				# replace the last known account balance with the balance from coinbase
+				self.cursor = self.con.cursor()
+				self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+				self.cursor.close()
+				self.con.commit()
+				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
+				logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+				
+				#update the price at deposit for the win tracker
+				logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
+				self.cursor = self.con.cursor()
+				self.price_at_deposit = self.price
+				self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
+				self.cursor.close()
+				self.con.commit()
+
+				return self.price_at_deposit
+
+			elif difference < 0: 
+				# do nothing with the coin hopper
+				# update the last known account balance to reflect balance in coinbase
+				self.cursor = self.con.cursor()
+				self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+				self.cursor.close()
+				self.con.commit()
+				logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+
+			if self.coin_hopper > 50:
+				self.dca_buy_logic()
 			
-			#update the price at deposit for the win tracker
-			logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
-			self.cursor = self.con.cursor()
-			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
-			self.cursor.close()
-			self.con.commit()
+			else:
+				logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
 
-		elif difference < 0: 
-			# do nothing with the coin hopper
-			# update the last known account balance to reflect balance in coinbase
-			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
-			self.cursor.close()
-			self.con.commit()
-			logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
-
-		#elif difference == 0:
-			#logger.info('No new deposit.')
-
-		if self.coin_hopper > 50: #if we have the required minimum balance, let's initialize a stoploss, else, continue
-			try:	
-				# initialize a stoploss, if one is not already initialized
-				if self.stoploss_initialized == False:
-					self.initialize_stop()
-			except Exception as e:
-					('Failed to initialize_stop() | %s' % e)
-
-		else:
-			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+		except Exception as e:
+			logger.error(e)
 
 		return self.balance, self.coin_hopper
 
@@ -592,8 +603,7 @@ class StopTrail():
 					self.update_hopper()
 			elif self.type == "buy":
 				if self.get_price():
-						self.get_balance()
-						self.print_status()
-						self.update_stop()
-						#self.update_hopper()
+					self.get_balance()
+					#self.print_status()
+					self.update_stop()
 			time.sleep(self.interval)
