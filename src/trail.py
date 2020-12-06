@@ -388,7 +388,7 @@ class StopTrail():
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
-					message = "TEST ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
+					message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
 					send_sns(message)
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
 
