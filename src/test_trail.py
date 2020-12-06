@@ -407,6 +407,7 @@ class StopTrail():
 			self.cursor = self.con.cursor()
 			self.cursor.execute("SELECT * FROM win_tracker;")
 			data = self.cursor.fetchone()
+			self.cursor.close()
 			price_at_deposit = data[1]
 			buy_count = data[3]
 			win_count = data[4]
@@ -429,6 +430,7 @@ class StopTrail():
 
 			query = "UPDATE win_tracker SET price_at_buy = ?, buy_count = ?, win_count = ?"
 			query_data = (self.price, buy_count, win_count)
+			self.cursor = self.con.cursor()
 			self.cursor.execute(query, query_data)
 			self.cursor.close()
 			self.con.commit()
@@ -447,15 +449,16 @@ class StopTrail():
 			self.stoploss = None
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
+			self.cursor.close()
 			self.stoploss_initialized = False
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
 
 			# reset coin_hopper after executing buy
-			# error_message = 'Failed to update exit_strategy.db after executing sell order'
-			# self.cursor = self.con.cursor()
-			# self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
-			# self.coin_hopper = 0
-			# logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
+			error_message = 'Failed to update exit_strategy.db after executing sell order'
+			self.cursor = self.con.cursor()
+			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
+			self.coin_hopper = 0
+			logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
 			time.sleep(10)
 			self.get_price()
 
@@ -516,6 +519,8 @@ class StopTrail():
 
 
 	def print_status(self):
+		logger.info('test: stoploss_initialized = %s' % self.stoploss_initialized)
+
 		logger.info("---------------------")
 		logger.info("Trail type: %s" % self.type)
 		logger.info("Market: %s" % self.market)
@@ -539,9 +544,9 @@ class StopTrail():
 
 	def get_price(self):
 		try:
-			self.price = self.coinbasepro.get_price(self.market)
+			# self.price = self.coinbasepro.get_price(self.market)
 			### TURN ONTO TEST PRICE MANUALLY
-			#self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
+			self.price = float(input('TEST PRICE: ')) #<-- this allows us to manually enter a TEST PRICE to validate script
 			return self.price
 		except Exception as e:
 			logging.error(e)
@@ -549,67 +554,71 @@ class StopTrail():
 
 
 	def get_balance(self):
-		# get coinbase balance
-		#self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
-		self.balance = 150
+			# get coinbase balance
+			#self.balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+		try:
+			self.balance = 150
 
-		# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
-		# get last_known_balance from the available_funds table
-		self.cursor = self.con.cursor()
-		self.cursor.execute("SELECT * FROM available_funds;")
-		first_row = self.cursor.fetchone()
-		self.cursor.close()
-		last_known_account_balance = first_row[1]
-		self.coin_hopper = first_row[2]
-
-		# take the difference between the coinbase balance and the last_known_account_balance
-		difference = self.balance - last_known_account_balance
-
-		self.print_status()
-
-		if difference > 0:
-			#take half of the newly deposited USD and allocate to the coin_hopper
-			half_of_deposit = difference * 0.5
-			self.coin_hopper += half_of_deposit
-
-			# replace the last known account balance with the balance from coinbase
+			# if self.balance > 50: # need some threshold of account balance - otherwise we should wait for more funds. What's the minimum USD buy?
+			# get last_known_balance from the available_funds table
 			self.cursor = self.con.cursor()
-			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+			self.cursor.execute("SELECT * FROM available_funds;")
+			first_row = self.cursor.fetchone()
 			self.cursor.close()
-			self.con.commit()
-			logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
-			logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
-			logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
-			
-			#update the price at deposit for the win tracker
-			logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
-			self.cursor = self.con.cursor()
-			self.price_at_deposit = self.price
-			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
-			self.cursor.close()
-			self.con.commit()
+			last_known_account_balance = first_row[1]
+			self.coin_hopper = first_row[2]
 
-			return self.price_at_deposit
+			# take the difference between the coinbase balance and the last_known_account_balance
+			difference = self.balance - last_known_account_balance
 
-		elif difference < 0: 
-			# do nothing with the coin hopper
-			# update the last known account balance to reflect balance in coinbase
-			# self.cursor = self.con.cursor()
-			# self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
-			# self.cursor.close()
-			# self.con.commit()
-			logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+			self.print_status()
 
-		#elif difference == 0:
-			#logger.info('No new deposit.')
+			if difference > 0:
+				#take half of the newly deposited USD and allocate to the coin_hopper
+				half_of_deposit = difference * 0.5
+				self.coin_hopper += half_of_deposit
 
-		if self.coin_hopper > 50:
-			self.dca_buy_logic()
+				# replace the last known account balance with the balance from coinbase
+				self.cursor = self.con.cursor()
+				self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+				self.cursor.close()
+				self.con.commit()
+				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
+				logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+				
+				#update the price at deposit for the win tracker
+				logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
+				self.cursor = self.con.cursor()
+				self.price_at_deposit = self.price
+				self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
+				self.cursor.close()
+				self.con.commit()
 
-		else:
-			logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+				return self.price_at_deposit
 
-		return self.balance, self.coin_hopper
+			elif difference < 0: 
+				# do nothing with the coin hopper
+				# update the last known account balance to reflect balance in coinbase
+				# self.cursor = self.con.cursor()
+				# self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
+				# self.cursor.close()
+				# self.con.commit()
+				logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+
+			#elif difference == 0:
+				#logger.info('No new deposit.')
+
+			if self.coin_hopper > 50:
+				self.dca_buy_logic()
+
+			else:
+				logger.info('Allocated funds (%.2f) for %s too low to satisfy minumum order size requirements. Waiting for additional deposit before initializing stop loss.' % (self.coin_hopper, self.market.split("/")[0]))
+
+			return self.balance, self.coin_hopper
+
+		except Exception as e:
+			logging.exception(e)
 
 
 	def run(self):
