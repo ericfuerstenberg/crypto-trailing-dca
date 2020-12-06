@@ -82,7 +82,9 @@ class StopTrail():
 
 			
 	def __del__(self):
-		logger.warning('Program has exited.')
+		message = ('Program has exited: %s.' % self.market)
+		send_sns(message)
+		logger.warning(message)
 		self.close_db()
 
 
@@ -477,8 +479,6 @@ class StopTrail():
 		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
 		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
 
-		self.print_status()
-
 		if self.price > upper_threshold:
 			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % ((self.stopsize*100), upper_threshold))
 			self.stoploss = upper_threshold
@@ -547,6 +547,8 @@ class StopTrail():
 
 			# take the difference between the coinbase balance and the last_known_account_balance
 			difference = self.balance - last_known_account_balance
+
+			self.print_status()
 
 			if difference > 0:
 				#take half of the newly deposited USD and allocate to the coin_hopper
