@@ -39,7 +39,7 @@ with con:
     con.execute("""
         CREATE TABLE win_tracker (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            price_at_deposit INTEGER,
+            price_at_deposit REAL,
             price_at_buy INTEGER,
             buy_count INTEGER,
             win_count INTEGER

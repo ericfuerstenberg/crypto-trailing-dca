@@ -388,7 +388,7 @@ class StopTrail():
 					filled, sell_value, fee, filled_price = fetch_order['amount'], fetch_order['cost'], fetch_order['fee']['cost'], (float(fetch_order['info']['executed_value']) / float(fetch_order['info']['filled_size']))
 					pending = False
 					logger.warn("ORDER: Buy order executed and filled successfully.")
-					message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
+					message = "TEST ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
 					send_sns(message)
 					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
 
@@ -432,19 +432,25 @@ class StopTrail():
 					time.sleep(2)
 
 
-			# reset stoploss after executing buy
+			# reset stoploss to None after executing buy
+			error_message = 'Failed to update exit_strategy.db after executing sell order'
 			self.stoploss = None
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO stoploss (id, stop_value) VALUES (?, ?)", (1, self.stoploss))
 			self.stoploss_initialized = False
 			logger.warn("Reset Stoploss: " + str(self.stoploss))
 
-			# reset coin_hopper after executing buy
-			error_message = 'Failed to update exit_strategy.db after executing sell order'
+			# reset coin_hopper to 0 after executing buy
 			self.cursor = self.con.cursor()
 			self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, 0))
 			self.coin_hopper = 0
 			logger.warn("Reset coin_hopper: " + str(self.coin_hopper))
+
+			# reset price_at_deposit to None after executing buy
+			self.cursor = self.con.cursor()
+			self.price_at_deposit = None
+			self.cursor.execute("UPDATE win_tracker SET price_at_deposit = null")
+			logger.warn("Reset price_at_deposit: " + str(self.price_at_deposit))
 
 			self.cursor.close()
 			self.con.commit()
@@ -476,8 +482,6 @@ class StopTrail():
 		price_at_deposit = data[1]
 		upper_threshold = price_at_deposit + (price_at_deposit * self.stopsize)
 		lower_threshold = price_at_deposit - (price_at_deposit * self.stopsize)
-
-		self.print_status()
 
 		if self.price > upper_threshold:
 			logger.warn('Price has risen %.2f%% from deposit price and hit our upper threshold of %.2f' % ((self.stopsize*100), upper_threshold))
@@ -545,11 +549,21 @@ class StopTrail():
 			last_known_account_balance = first_row[1]
 			self.coin_hopper = first_row[2]
 
+			self.cursor = self.con.cursor()
+			self.cursor.execute("SELECT * FROM win_tracker ;")
+			data = self.cursor.fetchone()
+			self.cursor.close()
+			self.price_at_deposit = data[1]
+			# price_at_initial_deposit = data[1]
+			# self.price_at_deposit = price_at_initial_deposit
+
 			# take the difference between the coinbase balance and the last_known_account_balance
 			difference = self.balance - last_known_account_balance
 
+			self.print_status()
+
 			if difference > 0:
-				#take half of the newly deposited USD and allocate to the coin_hopper
+				# take half of the newly deposited USD and allocate to the coin_hopper
 				half_of_deposit = difference * 0.5
 				self.coin_hopper += half_of_deposit
 
@@ -561,16 +575,22 @@ class StopTrail():
 				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
 				logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
 				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
-				
-				#update the price at deposit for the win tracker
-				logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
-				self.cursor = self.con.cursor()
-				self.price_at_deposit = self.price
-				self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
-				self.cursor.close()
-				self.con.commit()
 
-				return self.price_at_deposit
+				# then, check to see if this is a fresh/new deposit or if we're adding to a previous deposit
+				# only update the price_at_deposit in our win_tracker table if there is not a value already set
+				# we don't want to overwrite out upper/lower_thresholds set in dca_buy_logic() function
+				if self.price_at_deposit == None:
+					#update the price at deposit for the win tracker
+					logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
+					self.cursor = self.con.cursor()
+					self.price_at_deposit = self.price
+					self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
+					self.cursor.close()
+					self.con.commit()
+
+				else:
+					logger.warn('Price at deposit was already set at: %.4f. Treating this as an addition to our funds' % self.price_at_deposit)
+					#self.price_at_deposit = price_at_initial_deposit
 
 			elif difference < 0: 
 				# do nothing with the coin hopper
@@ -590,7 +610,7 @@ class StopTrail():
 		except Exception as e:
 			logger.error(e)
 
-		return self.balance, self.coin_hopper
+		return self.balance, self.coin_hopper, self.price_at_deposit
 
 
 	def run(self):
