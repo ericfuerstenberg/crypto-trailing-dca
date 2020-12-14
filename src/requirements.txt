@@ -5,6 +5,5 @@ logging
 pandas
 argparse
 configparser 
-smtplib
 logging
 boto3
