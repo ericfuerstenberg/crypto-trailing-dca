@@ -1,9 +1,7 @@
 ccxt
 config
 datetime
-logging
 pandas
 argparse
 configparser 
-logging
 boto3
