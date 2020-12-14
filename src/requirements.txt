@@ -4,5 +4,4 @@ datetime
 pandas
 argparse
 configparser 
-smtplib
 boto3

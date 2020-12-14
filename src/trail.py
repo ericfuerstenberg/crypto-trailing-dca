@@ -82,7 +82,9 @@ class StopTrail():
 
 			
 	def __del__(self):
-		logger.warning('Program has exited.')
+		message = ('Program has exited: %s.' % self.market)
+		send_sns(message)
+		logger.warning(message)
 		self.close_db()
 
 
