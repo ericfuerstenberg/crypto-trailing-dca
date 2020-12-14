@@ -17,10 +17,11 @@ COPY ./conf/logger.ini /crypto/conf/
 
 # update yum
 RUN yum -y update
+RUN yum install -y procps
+
 
 # install pip & other local dependencies
-RUN yum install -y \
-        python3-pip
+RUN yum install -y python3-pip
 RUN pip3 install --upgrade pip
 RUN yum install -y cronie
 
@@ -28,14 +29,14 @@ RUN yum install -y cronie
 COPY /src/requirements.txt /crypto/src/
 RUN pip3 install -r /crypto/src/requirements.txt
 
+# prettify our prompt and create helpful aliases
+RUN echo 'PS1="\[$(tput setaf 3)$(tput bold)[\]appname@\\h$:\\w]#\[$(tput sgr0) \]"' >> /root/.bashrc
+RUN echo "alias ll='ls -l'" >> /root/.bashrc
+
 # create log directory
 RUN mkdir log
 
-# #set env variable for https proxy to allow communication with workday
-# ENV HTTPS_PROXY=http://<PROXY_USERNAME>:<PROXY_PASSWORD>@web-proxy-vip.prod.box.net:3128 
-# ENV AWS_CA_BUNDLE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
-
-# set cronjob to run aws_user_audit script 
+# make scripts executable
 RUN chmod +x /crypto/src/main.py
 RUN chmod +x /crypto/src/trail.py
 RUN chmod +x /crypto/src/helper.py
@@ -48,4 +49,5 @@ RUN chmod +x /crypto/src/crypto_bot_definitions.py
 
 # RUN systemctl enable crond.service
 
-# ENTRYPOINT ["crond", "-n"]
+ENTRYPOINT ["crond", "-n"]
+
