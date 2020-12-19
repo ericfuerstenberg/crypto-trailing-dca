@@ -44,7 +44,7 @@ logger = get_logger(__file__)
 
 class StopTrail():
 
-	def __init__(self, market, type, stopsize, interval):
+	def __init__(self, market, type, stopsize, interval, split):
 
 		logger.warning('Initializing bot...')
 		logger.warning('RUNNING IN TEST MODE')
@@ -61,10 +61,16 @@ class StopTrail():
 		self.type = type
 		self.stopsize = stopsize
 		self.interval = interval
+		self.split = split
 		self.running = False
 		self.tracked_price = self.coinbasepro.get_price(self.market)
 		self.tracked_balance = self.coinbasepro.get_balance(self.market.split("/")[1])
 		
+		if self.split == 1:
+			logger.warning('Running in single coin mode: %s' % self.market)
+		else:
+			logger.warning('Running in multiple coin mode (%s)' % self.split)
+
 		# open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
 		self.cursor = self.con.cursor()
@@ -83,7 +89,7 @@ class StopTrail():
 
 			
 	def __del__(self):
-		logger.warning('Program has exited.')
+		logger.warning('Program has exited')
 		self.close_db()
 
 
@@ -574,9 +580,9 @@ class StopTrail():
 			self.print_status()
 
 			if difference > 0:
-				#take half of the newly deposited USD and allocate to the coin_hopper
-				half_of_deposit = difference * 0.5
-				self.coin_hopper += half_of_deposit
+				# split the newly deposited USD and allocate to the coin_hopper
+				split_deposit = difference / self.split #e.g., if 1 coin, difference == difference, if 2 coins difference == difference/2
+				self.coin_hopper += split_deposit
 
 				# replace the last known account balance with the balance from coinbase
 				self.cursor = self.con.cursor()
@@ -584,7 +590,8 @@ class StopTrail():
 				self.cursor.close()
 				self.con.commit()
 				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
-				logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+				if self.split > 1:
+					logger.warn('DEPOSIT: Dividing deposit into %s even allocations of %.2f.' % (self.split, split_deposit))
 				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
 				
 				#update the price at deposit for the win tracker
