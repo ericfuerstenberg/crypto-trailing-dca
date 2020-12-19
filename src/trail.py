@@ -44,7 +44,7 @@ logger = get_logger(__file__)
 
 class StopTrail():
 
-	def __init__(self, market, type, stopsize, interval):
+	def __init__(self, market, type, stopsize, interval, split):
 
 		logger.warning('Initializing bot...')
 
@@ -60,6 +60,7 @@ class StopTrail():
 		self.type = type
 		self.stopsize = stopsize
 		self.interval = interval
+		self.split = split
 		self.running = False
 		self.tracked_price = self.coinbasepro.get_price(self.market)
 		self.tracked_balance = self.coinbasepro.get_balance(self.market.split("/")[1])
@@ -392,7 +393,7 @@ class StopTrail():
 					logger.warn("ORDER: Buy order executed and filled successfully.")
 					message = "ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee)
 					send_sns(message)
-					logger.warn("ORDER: Bought %.6f %s at %.2f for %.2f %s. Fees: %.2f" % (filled, self.market.split("/")[0], filled_price, sell_value, self.market.split("/")[1], fee))
+					logger.warn(message)
 
 					# update win_tracker, add to the # of buys in the table, add to # of wins if it's a win
 					# output whether buy was a win, display % of buys that are wins
@@ -565,9 +566,9 @@ class StopTrail():
 			self.print_status()
 
 			if difference > 0:
-				# take half of the newly deposited USD and allocate to the coin_hopper
-				half_of_deposit = difference * 0.5
-				self.coin_hopper += half_of_deposit
+				# split the newly deposited USD and allocate to the coin_hopper
+				split_deposit = difference / self.split #e.g., if 1 coin, difference == difference, if 2 coins difference == difference/2
+				self.coin_hopper += split_deposit
 
 				# replace the last known account balance with the balance from coinbase
 				self.cursor = self.con.cursor()
@@ -575,7 +576,9 @@ class StopTrail():
 				self.cursor.close()
 				self.con.commit()
 				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
-				logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+				#logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
+				if self.split > 1:
+					logger.warn('DEPOSIT: Dividing deposit into %s even allocations of %.2f.' % (self.split, split_deposit))
 				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
 
 				# then, check to see if this is a fresh/new deposit or if we're adding to a previous deposit
