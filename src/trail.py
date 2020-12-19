@@ -64,6 +64,11 @@ class StopTrail():
 		self.running = False
 		self.tracked_price = self.coinbasepro.get_price(self.market)
 		self.tracked_balance = self.coinbasepro.get_balance(self.market.split("/")[1])
+
+		if self.split == 1:
+			logger.warning('Running in single coin mode: %s' % self.market)
+		else:
+			logger.warning('Running in multiple coin mode (%s)' % self.split)
 		
 		# open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
