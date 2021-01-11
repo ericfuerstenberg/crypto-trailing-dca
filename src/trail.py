@@ -386,10 +386,8 @@ class StopTrail():
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
 			
 			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
-			print(buy_order)
 			id = buy_order['info']['id']
 			pending = True
-			logger.info('waiting..')
 			time.sleep(2)
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
