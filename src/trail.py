@@ -386,8 +386,11 @@ class StopTrail():
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
 			
 			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
+			print(buy_order)
 			id = buy_order['info']['id']
 			pending = True
+			logger.info('waiting..')
+			time.sleep(2)
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
 
@@ -464,19 +467,19 @@ class StopTrail():
 			self.con.commit()
 		
 		except ccxt.AuthenticationError as e:
-			logger.error('Failed to execute sell order | Authentication error | %s' % str(e))
+			logger.exception('Failed to execute sell order | Authentication error | %s' % str(e))
 			raise
 		except ccxt.InsufficientFunds as e:
-			logger.error('Failed to execute sell order  | Insufficient funds | %s' % str(e))
+			logger.exception('Failed to execute sell order  | Insufficient funds | %s' % str(e))
 			raise
 		except ccxt.BadRequest as e:
-			logger.error('Failed to execute sell order  | Bad request| %s' % str(e))
+			logger.exception('Failed to execute sell order  | Bad request| %s' % str(e))
 			raise
 		except ccxt.NetworkError as e:
-			logger.error('Failed to execute sell order  | Network error | %s' % e)
+			logger.exception('Failed to execute sell order  | Network error | %s' % e)
 
 		except Exception as e:
-			logger.error('%s | %s' % (error_message, e))
+			logger.exception('%s | %s' % (error_message, e))
 			raise
 
 
