@@ -388,7 +388,7 @@ class StopTrail():
 			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
 			id = buy_order['info']['id']
 			pending = True
-			time.sleep(2)
+			time.sleep(5)
 			fetch_order = self.coinbasepro.get_order(id)
 			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
 
