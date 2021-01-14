@@ -1,0 +1,10 @@
+[Unit]
+Description=buy-eth systemd service
+
+[Service]
+Type=simple
+ExecStart=python3 /crypto/eric/buy-btc/<bot-directory>/src/main.py --symbol ETH/USD --type buy --size 0.02 --split 2
+User=efuerstenberg
+
+[Install]
+WantedBy=multi-user.target
