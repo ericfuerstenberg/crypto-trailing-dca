@@ -39,3 +39,19 @@ class CoinbasePro():
         return (self.ccxtClient.fetch_order(
             id=id
         ))
+
+    def get_payment_methods(self):
+        return (self.ccxtClient.fetch_payment_methods())
+
+    def deposit_funds(self, payment_method_id, deposit_amount, currency):
+        return (self.ccxtClient.deposit(
+            amount = deposit_amount,
+            code = currency,
+            address = 'None',
+            params = {
+                'payment_method_id': payment_method_id
+            }
+        ))
+
+    def fetch_deposits(self):
+        return (self.ccxtClient.fetch_deposits())
