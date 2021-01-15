@@ -254,7 +254,7 @@ class StopTrail():
 					self.tracked_price = self.price
 
 				# enter logic to track current balance, if no balance, don't update the stoploss. Wait for us to deposit some USD. 	
-				if self.balance > 1:
+				if self.balance > 50:
 
 					if (self.price + (self.price * self.stopsize)) < self.stoploss:
 						self.stoploss = (self.price + (self.price * self.stopsize))
@@ -268,7 +268,7 @@ class StopTrail():
 						self.execute_buy()
 
 				else: 
-					logger.warn('No USD available. Waiting for deposit.')
+					logger.warn('Not enough USD available. Waiting for additional deposit.')
 		else:
 			logger.info('No stoploss yet initialized. Waiting.')
 
@@ -508,7 +508,7 @@ class StopTrail():
 
 		else:
 			if self.stoploss_initialized == False:
-				logger.info('Price is still within our starting range of +/- %.2f%% from deposit price (%.2f to %.2f). Taking no action.' % ((self.stopsize*100), upper_threshold, lower_threshold))
+				logger.info('Price is still +/- %.2f%% from deposit price of %.2f (range: %.2f to %.2f). Taking no action until movement outside of this range.' % ((self.stopsize*100), price_at_deposit, upper_threshold, lower_threshold))
 			
 
 
@@ -581,27 +581,29 @@ class StopTrail():
 				self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
 				self.cursor.close()
 				self.con.commit()
-				logger.warn("DEPOSIT: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
+				logger.warn("BALANCE UPDATE: %.2f USD was just added to account balance. New total: %.2f" % (difference, self.balance))
 				#logger.warn('DEPOSIT: Allocating half of this new deposit for ETH and half for BTC.')
 				if self.split > 1:
-					logger.warn('DEPOSIT: Dividing deposit into %s even allocations of %.2f.' % (self.split, split_deposit))
-				logger.warn('DEPOSIT: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
+					logger.warn('BALANCE UPDATE: Dividing deposit into %s even allocations of %.2f.' % (self.split, split_deposit))
+				logger.warn('BALANCE UPDATE: Total funds now available to purchase %s: %.4f %s' % (self.market.split("/")[0], self.coin_hopper, self.market.split("/")[1]))
 
 				# then, check to see if this is a fresh/new deposit or if we're adding to a previous deposit
 				# only update the price_at_deposit in our win_tracker table if there is not a value already set
 				# we don't want to overwrite out upper/lower_thresholds set in dca_buy_logic() function
-				if self.price_at_deposit == None:
-					#update the price at deposit for the win tracker
-					logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
-					self.cursor = self.con.cursor()
-					self.price_at_deposit = self.price
-					self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
-					self.cursor.close()
-					self.con.commit()
+				if self.coin_hopper > 50:
+					if self.price_at_deposit == None:
+						#update the price at deposit for the win tracker
+						logger.warn('BOT ACTIVATED: Balance is now large enough for minimum order size.')
+						logger.warn('PRICE: Market price at time of deposit: %.2f' % self.price)
+						self.cursor = self.con.cursor()
+						self.price_at_deposit = self.price
+						self.cursor.execute("UPDATE win_tracker SET price_at_deposit = %.2f" % self.price)
+						self.cursor.close()
+						self.con.commit()
 
-				else:
-					logger.warn('Price at deposit was already set at: %.4f. Treating this as an addition to our funds' % self.price_at_deposit)
-					#self.price_at_deposit = price_at_initial_deposit
+					else:
+						logger.warn('Price at deposit was already set at: %.4f. Treating this as an addition to our funds' % self.price_at_deposit)
+						#self.price_at_deposit = price_at_initial_deposit
 
 			elif difference < 0: 
 				# do nothing with the coin hopper
@@ -610,7 +612,7 @@ class StopTrail():
 				self.cursor.execute("REPLACE INTO available_funds (id, account_balance, coin_hopper) VALUES (?, ?, ?)", (1, self.balance, self.coin_hopper))
 				self.cursor.close()
 				self.con.commit()
-				logger.warn("UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
+				logger.warn("BALANCE UPDATE: %.2f USD was just removed from account balance. New total: %.2f" % (abs(difference), self.balance))
 
 			if self.coin_hopper > 50:
 				self.dca_buy_logic()
