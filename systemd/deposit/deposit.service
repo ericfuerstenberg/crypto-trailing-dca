@@ -4,7 +4,7 @@ Wants=deposit.timer
 
 [Service]
 TimeoutStartSec=0
-ExecStart=python3 /crypto-bot/src/deposit.py
+ExecStart=python3 /home/efuerstenberg/crypto-bot/src/deposit.py
 User=efuerstenberg
 
 [Install]
