@@ -1,0 +1,10 @@
+[Unit]
+Description=eric-sell-btc systemd service.
+
+[Service]
+Type=simple
+ExecStart=python3 /crypto/eric/sell-btc/<bot-directory>/src/main.py --symbol BTC/USD --type sell --size 0.05
+User=efuerstenberg
+
+[Install]
+WantedBy=multi-user.target
