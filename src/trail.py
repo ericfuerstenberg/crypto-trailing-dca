@@ -377,20 +377,22 @@ class StopTrail():
 
 
 	def execute_buy(self):
+		funds = int(self.coin_hopper)
 		amount = ((self.coin_hopper / self.price) * 0.995)
-		price = 1000000
+		#price = 1000000
 		error_message = 'Failed to execute buy order'
 
 		try: 
 			logger.warn("ORDER: Buy triggered | Price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
 			logger.warn("ORDER: Executing market order (BUY) of ~%.4f %s at %.2f %s for %.2f %s" % (amount, self.market.split("/")[0], self.price, self.market.split("/")[1], (self.coin_hopper), self.market.split("/")[1]))
 			
-			buy_order = self.coinbasepro.buy(self.market, amount, price) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
+			buy_order = self.coinbasepro.buy(self.market, funds) #buy with our entire available_funds for the coin (set super high limit price, effectively market sell)
 			id = buy_order['info']['id']
 			pending = True
 			time.sleep(5)
+			logger.info(buy_order)
 			fetch_order = self.coinbasepro.get_order(id)
-			size, price, status, done_reason = fetch_order['info']['size'], fetch_order['price'], fetch_order['info']['status'], fetch_order['info']['done_reason']
+			status, done_reason = fetch_order['info']['status'], fetch_order['info']['done_reason']
 
 			while pending:
 				if status == 'done' and done_reason == 'filled':
@@ -465,16 +467,16 @@ class StopTrail():
 			self.con.commit()
 		
 		except ccxt.AuthenticationError as e:
-			logger.exception('Failed to execute sell order | Authentication error | %s' % str(e))
+			logger.exception('Failed to execute buy order | Authentication error | %s' % str(e))
 			raise
 		except ccxt.InsufficientFunds as e:
-			logger.exception('Failed to execute sell order  | Insufficient funds | %s' % str(e))
+			logger.exception('Failed to execute buy order  | Insufficient funds | %s' % str(e))
 			raise
 		except ccxt.BadRequest as e:
-			logger.exception('Failed to execute sell order  | Bad request| %s' % str(e))
+			logger.exception('Failed to execute buy order  | Bad request| %s' % str(e))
 			raise
 		except ccxt.NetworkError as e:
-			logger.exception('Failed to execute sell order  | Network error | %s' % e)
+			logger.exception('Failed to execute buy order  | Network error | %s' % e)
 
 		except Exception as e:
 			logger.exception('%s | %s' % (error_message, e))
