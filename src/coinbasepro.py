@@ -12,13 +12,16 @@ class CoinbasePro():
         # set sandbox mode
         self.ccxtClient.set_sandbox_mode(True)
 
-    def buy(self, market, amount, price):
+
+    def buy(self, market, funds):
         return (self.ccxtClient.create_order(
             symbol=market,
-            type="market", #maybe I can use 'funds' here to pass the total balance? how does this work on ccxt's end
+            type="market", 
             side="buy",
-            amount=amount,
-            price=price,
+            amount=0,
+            params = {
+                "funds": funds
+            }
         ))
 
     def sell(self, market, amount):
