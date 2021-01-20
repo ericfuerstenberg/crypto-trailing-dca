@@ -7,7 +7,7 @@ import pandas as pd
 import sqlite3 as sl
 from coinbasepro import CoinbasePro
 from crypto_bot_definitions import LOG_DIR
-from helper import get_logger, send_sns, Config
+from helper import get_logger, send_sns, Config, round_decimals_down
 
 # To Do:
 # 1. DONE? - Instead of usin a static amount of funds, create a function to read from a dataframe, check against current price, and update a "holding pen/hopper" with more ETH as new thresholds are crossed (https://stackoverflow.com/questions/42285806/how-to-pop-rows-from-a-dataframe)
@@ -377,7 +377,7 @@ class StopTrail():
 
 
 	def execute_buy(self):
-		funds = int(self.coin_hopper)
+		funds = round_decimals_down(self.coin_hopper, 2)
 		amount = ((self.coin_hopper / self.price) * 0.995)
 		#price = 1000000
 		error_message = 'Failed to execute buy order'
