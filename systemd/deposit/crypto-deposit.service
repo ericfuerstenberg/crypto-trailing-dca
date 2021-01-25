@@ -1,10 +1,11 @@
 [Unit]
-Description=automation for weekly dca deposit
-Wants=crypto-deposit.timer
+Description=Weekly DCA deposit - automated using crypto-bot
+Wants=deposit.timer
 
 [Service]
+WorkingDirectory=/home/efuerstenberg/deposit/src
 TimeoutStartSec=0
-ExecStart=/usr/bin/python3 /home/efuerstenberg/crypto-bot/src/deposit.py
+ExecStart=/usr/bin/python3 /home/efuerstenberg/deposit/src/deposit.py
 User=efuerstenberg
 
 [Install]
