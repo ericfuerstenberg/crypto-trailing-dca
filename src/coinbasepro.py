@@ -1,4 +1,17 @@
 import ccxt
+import config
+import datetime
+import logging
+import time
+import pandas as pd
+import sqlite3 as sl
+from coinbasepro import CoinbasePro
+from crypto_bot_definitions import LOG_DIR
+from helper import get_logger, send_sns, Config
+from database import Database
+from stoploss import Stoploss
+
+logger = get_logger(__file__)
 
 class CoinbasePro():
 
@@ -30,7 +43,10 @@ class CoinbasePro():
         ))
 
     def get_price(self, market):
-        return float(self.ccxtClient.fetch_ticker(market)['info']['price'])
+        try:
+            return float(self.ccxtClient.fetch_ticker(market)['info']['price'])
+        except Exception as e:
+			logging.error(e)
 
     def get_balance(self, coin):
         return float(self.ccxtClient.fetch_balance()[coin]['free'])
