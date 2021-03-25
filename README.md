@@ -30,17 +30,15 @@ Then modify `/conf/settings.ini` and insert your API key, secret, and passcode.
 
 ```
 $ python main.py --help
-usage: main.py [-h] --symbol SYMBOL --size SIZE --type TYPE
-               [--interval INTERVAL]
+usage: main.py [-h] --symbol SYMBOL --size SIZE --type TYPE [--interval INTERVAL] [--split SPLIT]
 
 optional arguments:
   -h, --help           show this help message and exit
   --symbol SYMBOL      Market Symbol (Ex: NEO/BTC - NEO/USDT)
-  --size SIZE          What percentage the stop loss should be
-                       placed above or below current price (e.g., 0.05 for 5%, 0.10 for 10%)
-  --type TYPE          Specify whether the trailing stop loss should be in
-                       buying or selling mode. (Ex: 'buy' or 'sell')
-  --interval INTERVAL  How often the bot should check for price changes (default 5 seconds)
+  --size SIZE          How many satoshis (or USD) the stop loss should be placed above or below current price
+  --type TYPE          Specify whether the trailing stop loss should be in buying or selling mode. (Ex: 'buy' or 'sell')
+  --interval INTERVAL  How often the bot should check for price changes
+  --split SPLIT        How many trading pairs should we allocate our funds between? (e.g., if ETH/USD and BTC/USD simultaneously: 2, if ETH/USD only: 1
 ```
 ```
 $ python3 main.py --symbol BTC/USD --size 0.05 --type sell
