@@ -34,7 +34,7 @@ usage: main.py [-h] --symbol SYMBOL --size SIZE --type TYPE [--interval INTERVAL
 
 optional arguments:
   -h, --help           show this help message and exit
-  --symbol SYMBOL      Market Symbol (Ex: NEO/BTC - NEO/USDT)
+  --symbol SYMBOL      Market Symbol (Ex: BTC/USD, ETH/USD)
   --size SIZE          How many satoshis (or USD) the stop loss should be placed above or below current price
   --type TYPE          Specify whether the trailing stop loss should be in buying or selling mode. (Ex: 'buy' or 'sell')
   --interval INTERVAL  How often the bot should check for price changes
