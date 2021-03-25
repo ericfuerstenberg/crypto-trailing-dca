@@ -58,6 +58,7 @@ target/
 
 # other
 /conf/.tmp-settings
+/conf/settings.ini
 .tmp-creds
 .vscode
 crypto/
