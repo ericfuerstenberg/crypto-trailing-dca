@@ -34,9 +34,9 @@ usage: main.py [-h] --symbol SYMBOL --size SIZE --type TYPE [--interval INTERVAL
 
 optional arguments:
   -h, --help           show this help message and exit
-  --symbol SYMBOL      Market Symbol (Ex: BTC/USD, ETH/USD)
-  --size SIZE          How many satoshis (or USD) the stop loss should be placed above or below current price
-  --type TYPE          Specify whether the trailing stop loss should be in buying or selling mode. (Ex: 'buy' or 'sell')
+  --symbol SYMBOL      Market Symbol (e.g., BTC/USD, ETH/USD)
+  --size SIZE          The decimal value of the percentage that the stop loss should be placed above or below current price (e.g., 0.05, 0.10)
+  --type TYPE          Specify whether the trailing stop loss should be in buying or selling mode. (e.g., 'buy' or 'sell')
   --interval INTERVAL  How often the bot should check for price changes
   --split SPLIT        How many trading pairs should we allocate our funds between? (e.g., if ETH/USD and BTC/USD simultaneously: 2, if ETH/USD only: 1
 ```
