@@ -1,5 +1,5 @@
 # Crypto Bot
-Provides a dynamic stop-loss that automatically adjusts as the price increases or decreases (depending on mode specified).
+At it's core, crypto-bot provides a dynamic stop-loss that automatically adjusts as market price increases or decreases (depending on mode specified). This trailing stop-loss can be used in either a 'buy-mode', where the bot will actively monitor the market price for dips and attempt to execute a purchase on a down swing, or in the 'sell-mode', which executes a more complex strategy that releases coins to be sold once defined threshold values have been crossed and then places a trailing stoploss that attempts to follow the market price as it moves higher and capitalize on further upside. 
 
 
 ## Sell Mode
@@ -18,6 +18,12 @@ Allows user to create an exit strategy including:
 The bot will track the current price against the defined thresholds and release coins to be sold as thresholds are met. As new thresholds are hit, the bot will automatically increment a "hopper" to track the appropriate amount of coins to sell based on the defined exit strategy. When the market price drops below an established stop loss value, the bot will sell only the amount of coins that have been released into the hopper (i.e., those marked "available to sell"). 
 
 ## Buy Mode
+
+In 'buy-mode', the bot will actively monitor the market price around a defined range that is initialized upon the deposit of USD funds to the account. The bot will execute a core strategy around this "range" that consists of three modes: 
+
+1. If the market price rises X% above the deposit price it will execute a market buy order. 
+2. If the market price ranges between the higher and lower bound (X% above and X% below deposit price), no action is taken.
+3. If the market price drops X% below the deposit price, it will initial a stoploss at the deposit price and continue to lower the stoploss upon each new market price low observed. Once a stoploss has been initialized the boy will execute a market buy order if the current market price exceeds the stoploss. 
 
 ## Installation
 
