@@ -12,7 +12,6 @@ class CoinbasePro():
         # set sandbox mode
         self.ccxtClient.set_sandbox_mode(True)
 
-
     def buy(self, market, funds):
         return (self.ccxtClient.create_order(
             symbol=market,
