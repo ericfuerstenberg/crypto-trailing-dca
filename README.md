@@ -89,6 +89,8 @@ In 'buy-mode', the bot will actively monitor the market price around a defined r
 2. If the market price ranges between the higher and lower bound (X% above and X% below deposit price), no action is taken.
 3. If the market price drops X% below the deposit price, it will initial a stoploss at the deposit price and continue to lower the stoploss upon each new market price low observed. Once a stoploss has been initialized the boy will execute a market buy order if the current market price exceeds the stoploss. 
 
+![image](https://user-images.githubusercontent.com/13890717/113211108-e1877f00-9229-11eb-971b-35af02e8d68f.png)
+
 
 ## License
 Released under GPLv3.
