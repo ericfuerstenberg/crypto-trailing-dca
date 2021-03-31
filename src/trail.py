@@ -6,39 +6,8 @@ import time
 import pandas as pd
 import sqlite3 as sl
 from coinbasepro import CoinbasePro
-from crypto_bot_definitions import LOG_DIR
+from definitions import LOG_DIR
 from helper import get_logger, send_sns, Config, round_decimals_down
-
-# To Do:
-# 1. DONE? - Instead of usin a static amount of funds, create a function to read from a dataframe, check against current price, and update a "holding pen/hopper" with more ETH as new thresholds are crossed (https://stackoverflow.com/questions/42285806/how-to-pop-rows-from-a-dataframe)
-# 2. DONE - Modify the stop loss to use a % rather than a static amount. E.g., 5% stop loss.
-# 3. DONE? - Modify the logging output to specify how much is currently in the hopper (e.g., ETH to trade: 0.5, 0.75, etc.)
-# 4. DONE - Adjust script so it only initializes the stop loss once a threshold is first hit
-# 5. Need to allow script to continue running after a sell, right now it simply exits
-# 6. DONE - Persist the exit strategy table and make adjustments based on what thresholsd have been hit.
-# 6b. 	DONE Should persist a Hit Threshold Y/N for each line/row - then look for the first threshold that hasn't been hit
-# 7. DONE - Persist the hopper data in another table in the sqlite db. initialize_hopper() and update_hopper() should read from this table.
-# 7a. 	DONE When hopper changes, insert the new value into the database.
-# 7. DONE - Set up actual logging output to a logfile. Print timestamps for each message. Hopper updates, stop loss updates, etc should all be logged to the system for tracking purposes.
-# 8. DONE - Error handling? e.g., ccxt.base.errors.InsufficientFunds: coinbasepro Insufficient funds. What if DB update fails and hopper doesn't reset?
-# 9. IN PROGRESS - Port over to aws instance, prepare to dockerize the script - or create a systemd service to ensure it's consistently running
-# 9a. 	DONE - Secure ec2 instance - https://aws.amazon.com/premiumsupport/knowledge-center/ec2-ssh-best-practices/
-# 10. DONE - Improve testability - comment out the check_price call and have script ask for a manual price entry to test against?
-# 11. IN PROGRESS - Validate that orders go through & complete - order validation, etc. (don't want to empty hopper if sell failed)
-# 12. Create helper function to publish messages to an SNS topic when critical events happen (e.g., hopper/stoploss updates, sells execute, errors occur, etc) - then you can recieve email alerts
-# 13. DONE - Build logic so that it won't execute a sell if the current price is lower than a previous price that we've sold at - KILL SWITCH!
-# 13a. 	NOT WORTH EFFORT - Do we want a killswitch on our first threshold? This is not currently implemented. 
-# 13b. 	NOT WORTH EFFORT - NOTE: Killswitch will not save us if the price flash crashes, but we aren't below our most recent sell price. 
-# 14. Neuter the script (comment out the execute_sell() function) and then test it in production. 
-# 15. DONE - Figure out the character limits for different values from coinbase, cleanup the digits on our logging output so it's more readable. 
-
-# Considerations:
-# 1. MINIMAL CONCERN (assuming exit thresholds are spaced logically) - The script can only add one chunk of coins per interval when the price exceeds a threshold (or multiple). Debate whether we want it to add all of the available funds up to a specific price when multiple thresholds are crossed at once?
-# 2. MINIMAL CONCERN - It seems prone to effects of short-term spikes. E.g., price spikes up 200-300 USD and then it drops back down immediately, but our stoploss is pulled up higher than we'd want. Could take like an average of the price over the last 3 seconds? Dunno. It doesn't need to be perfect though.
-# 3. DECIDED AGAINST THIS - Maybe we should initialize the first stoploss at the threshold price? Then we can start walking the threshold up once the potential new stoploss [(current price - (current price * stop percent))] is higher than our threshold? Otherwise stoploss = threshold price. That we we won't sell lower than the threshold. 
-# 3a. DECIDED AGAINST THIS - Then also maybe we should update the stoploss to tbe the next threshold value if threshold is hit but we haven't moved up to the next stoploss value? Avoid situation where we increase hopper but our stoploss is still set at an earlier threshold value?
-# 4. Decide on a restart strategy for the bot - do we want the systemd service to run constantly? To restart when it crashes? To restart only on reboot? etc. Think about implications. 
-
 
 logger = get_logger(__file__)
 
