@@ -1,4 +1,4 @@
-# Crypto Bot
+# crypto-bot
 At it's core, crypto-bot provides a dynamic stop-loss that automatically adjusts as market price increases or decreases (depending on mode specified). This trailing stop-loss can be used in either a 'buy-mode', where the bot will actively monitor the market price for dips and attempt to execute a purchase on a down swing, or in the 'sell-mode', which executes a more complex strategy that releases coins to be sold once defined threshold values have been crossed and then places a trailing stoploss that attempts to follow the market price as it moves higher and capitalize on further upside. 
 
 
