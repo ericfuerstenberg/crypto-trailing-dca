@@ -81,6 +81,9 @@ Allows user to create an exit strategy including:
 
 The bot will track the current price against the defined thresholds and release coins to be sold as thresholds are met. As new thresholds are hit, the bot will automatically increment a "hopper" to track the appropriate amount of coins to sell based on the defined exit strategy. When the market price drops below an established stop loss value, the bot will sell only the amount of coins that have been released into the hopper (i.e., those marked "available to sell"). 
 
+![image](https://user-images.githubusercontent.com/13890717/113211258-1c89b280-922a-11eb-866d-2a9d3c10a292.png)
+
+
 ### Buy Mode
 
 In 'buy-mode', the bot will actively monitor the market price around a defined range that is initialized upon the deposit of USD funds to the account. The bot will execute a core strategy around this "range" that consists of three modes: 
