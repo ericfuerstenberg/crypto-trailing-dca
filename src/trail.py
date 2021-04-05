@@ -30,6 +30,7 @@ class StopTrail():
 		self.stopsize = stopsize
 		self.interval = interval
 		self.split = split
+		
 		self.running = False
 		self.tracked_price = self.coinbasepro.get_price(self.market)
 		self.tracked_balance = self.coinbasepro.get_balance(self.market.split("/")[1])
@@ -38,6 +39,7 @@ class StopTrail():
 			logger.warning('Running in single coin mode: %s' % self.market)
 		else:
 			logger.warning('Running in multiple coin mode (%s)' % self.split)
+
 		
 		# open db connection and check for a persisted stoploss value
 		self.con = sl.connect("exit_strategy.db")
@@ -287,10 +289,22 @@ class StopTrail():
 		# execute sell order, verify that sell posts and completes, then reset hopper, stoploss, and sold_at values
 		try:
 			logger.warn("Sell triggered | Current price: %.2f | Stop loss: %.2f" % (self.price, self.stoploss))
-			logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
 			error_message = 'Failed to execute sell order'
 
-			sell_order = self.coinbasepro.sell(self.market, self.hopper)
+			if self.market == "ETH/USD":
+				target_amount = Config.get_value('sell','eth')
+			elif self.market == "BTC/USD":
+				target_amount = Config.get_value('sell','btc')
+
+			sell_amount = float(target_amount) / self.price
+
+			if sell_amount < self.hopper:
+				logger.warn("Selling less than our hopper. TEST")
+				sell_order = self.coinbasepro.sell(self.market, sell_amount)
+			elif sell_amount >= self.hopper:
+				logger.warn("Attempting to sell %s %s at %.2f for %.2f %s" % (self.hopper, self.market.split("/")[0], self.price, (self.price*self.hopper), self.market.split("/")[1]))
+				sell_order = self.coinbasepro.sell(self.market, self.hopper)
+
 			id = sell_order['info']['id']
 			pending = True
 			fetch_order = self.coinbasepro.get_order(id)
