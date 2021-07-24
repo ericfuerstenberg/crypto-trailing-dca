@@ -1,7 +1,7 @@
+argparse
+boto3
 ccxt
 config
+configparser 
 datetime
 pandas
-argparse
-configparser 
-boto3
