@@ -1,5 +1,5 @@
 # crypto-trailing-dca
-Implements dynamic, trailing stop loss functionality for CoinbasePro. Designed to be utilized in either “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or “sell-mode” to maximize profits by executing a hybrid-DCA exit strategy based on predefined take-profit thresholds and trailing stop losses.
+Implements dynamic, trailing stop loss functionality for CoinbasePro. Designed to be utilized in either 1) “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or 2) “sell-mode” to maximize profits by executing a hybrid-DCA exit strategy based on predefined take-profit thresholds and trailing stop losses.
 
 
 ## Installation
