@@ -1,5 +1,5 @@
-# crypto-trailing-stop
-Implements dynamic, trailing stop loss functionality. Designed to be utilized in either “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or “sell-mode” to maximize profits by executing an exit strategy based on predefined take-profit thresholds and trailing stop losses.
+# crypto-trailing-dca
+Implements dynamic, trailing stop loss functionality. Designed to be utilized in either “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or “sell-mode” to maximize profits by executing a hybrid-DCA exit strategy based on predefined take-profit thresholds and trailing stop losses.
 
 
 ## Installation
