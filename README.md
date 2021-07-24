@@ -86,11 +86,11 @@ The bot will track the current price against the defined thresholds and release 
 
 ### Buy Mode
 
-In 'buy-mode', the bot will actively monitor the market price around a defined range that is initialized upon the deposit of USD funds to the account. The bot will execute a core strategy around this "range" that consists of three modes: 
+In 'buy-mode', the bot will actively monitor the market price around a defined range that is initialized upon the deposit of USD funds to the account. The bot will execute a strategy around this "range" that consists of three modes: 
 
 1. If the market price rises X% above the deposit price it will execute a market buy order. 
 2. If the market price ranges between the higher and lower bound (X% above and X% below deposit price), no action is taken.
-3. If the market price drops X% below the deposit price, it will initial a stoploss at the deposit price and continue to lower the stoploss upon each new market price low observed. Once a stoploss has been initialized the boy will execute a market buy order if the current market price exceeds the stoploss. 
+3. If the market price drops X% below the deposit price, it will initialize a stoploss at the deposit price and continue to lower the stoploss upon each new market price low observed. Once a stoploss has been initialized the boy will execute a market buy order if the current market price exceeds the stoploss. 
 
 ![image](https://user-images.githubusercontent.com/13890717/113211108-e1877f00-9229-11eb-971b-35af02e8d68f.png)
 
