@@ -1,10 +1,10 @@
-from configparser import ConfigParser
-import smtplib
-import logging
 import boto3
+import logging
 import math
+import smtplib
+from configparser import ConfigParser
 from logging import config
-from crypto_bot_definitions import CONF_DIR
+from definitions import CONF_DIR
 
 __LOGGER_CONF_FILE = CONF_DIR + "/logger.ini"
 __SETTINGS_CONF_FILE = CONF_DIR + "/settings.ini"

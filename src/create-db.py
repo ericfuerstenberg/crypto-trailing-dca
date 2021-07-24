@@ -1,7 +1,5 @@
 import sqlite3 as sl
 
-
-#set up the sqlite database here? use it instead of the pandas dataframe
 con = sl.connect('exit_strategy.db')
 with con:
     con.execute("""
