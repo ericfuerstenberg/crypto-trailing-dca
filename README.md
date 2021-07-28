@@ -1,5 +1,5 @@
 # crypto-trailing-dca
-Implements dynamic, trailing stop loss functionality for CoinbasePro. Designed to be utilized in either 1) “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or 2) “sell-mode” to maximize profits by executing a hybrid-DCA exit strategy based on predefined take-profit thresholds and trailing stop losses.
+Implements dynamic, trailing stop loss functionality for Coinbase Pro. Designed to be utilized in either 1) “buy-mode” to create a dollar cost average (DCA) strategy that capitalizes on short-term down swings or 2) “sell-mode” to maximize profits by executing a hybrid-DCA exit strategy based on predefined take-profit thresholds and trailing stop losses.
 
 
 ## Installation
@@ -18,7 +18,7 @@ pip install ccxt
 
 ## Configure API keys
 
-Obtain an API key from CoinbasePro with 'view' and 'trade' permissions enabled. 
+Obtain an API key from Coinbase Pro with 'view' and 'trade' permissions enabled. 
 
 Then modify `/conf/settings.ini` and insert your API key, secret, and passcode.
 
